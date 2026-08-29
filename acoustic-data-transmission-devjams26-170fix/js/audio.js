@@ -5,6 +5,7 @@ const AudioPipeline = {
     analyser: null,
     micStream: null,
     isListening: false,
+    animationId: null,
 
     // ----------------------------------------------------
     // WIDE-BAND FREQUENCY ALLOCATION (Zero Crosstalk)
@@ -17,7 +18,6 @@ const AudioPipeline = {
     ],
     
     START_FREQ: 17000, // Wake up receiver
-    SYNC_FREQ:  16500, // Precise clock-sync trigger
     END_FREQ:   17500, // Transmission complete
 
     // ----------------------------------------------------
@@ -25,7 +25,7 @@ const AudioPipeline = {
     // ----------------------------------------------------
     BAUD_RATE: 45,     // Duration of each tone pulse (ms)
     GUARD_GAP: 35,     // Dead-air between pulses to stop echo overlap (ms)
-    THRESHOLD: 35,     // Amplitude required to register a 1 (out of 255)
+    THRESHOLD: 35,     // Amplitude required to register a signal (out of 255)
 
     init: function() {
         if (!this.audioCtx) {
@@ -40,7 +40,6 @@ const AudioPipeline = {
     playParallelTones: function(frequencies, durationMs) {
         if (!this.audioCtx || frequencies.length === 0) return;
 
-        // NEW: Ensure an analyser exists so the visualizer can see outgoing TX bursts
         if (!this.analyser) {
             this.analyser = this.audioCtx.createAnalyser();
             this.analyser.fftSize = 2048;
@@ -50,7 +49,7 @@ const AudioPipeline = {
         const durationSec = durationMs / 1000;
         const masterGain = this.audioCtx.createGain();
 
-        // Prevent Legion i7 speakers from distorting by dividing volume by active tones
+        // Prevent distortion by dividing volume by active tones
         const peakVolume = 0.9 / Math.max(1, frequencies.length);
 
         masterGain.gain.setValueAtTime(0, now);
@@ -58,7 +57,6 @@ const AudioPipeline = {
         masterGain.gain.setValueAtTime(peakVolume, now + durationSec - 0.005);
         masterGain.gain.linearRampToValueAtTime(0, now + durationSec);
         
-        // NEW ROUTING: Connect Gain -> Analyser -> Speakers
         masterGain.connect(this.analyser);
         this.analyser.connect(this.audioCtx.destination);
 
@@ -74,17 +72,19 @@ const AudioPipeline = {
 
     transmitPayload: async function(payloadBytes) {
         if (!this.audioCtx) this.init();
-        console.log(`[TX] Broadcasting ${payloadBytes.length} bytes...`);
+        console.log(`[TX] Initiating transmission sequence for ${payloadBytes.length} bytes...`);
 
         // 1. PREAMBLE WAKEUP (17kHz for 300ms)
         this.playParallelTones([this.START_FREQ], 300);
         await this.sleep(350); 
 
-        // 2. PILOT SYNC (16.5kHz for 100ms)
-        this.playParallelTones([this.SYNC_FREQ], 100);
-        await this.sleep(100 + this.GUARD_GAP + 50);
+        // 2. NEW: SYNC FRAME (All 4 bits ON -> 1111)
+        console.log("[TX] Sending 1111 Sync Frame...");
+        this.playParallelTones(this.LANE_FREQS, this.BAUD_RATE); 
+        await this.sleep(this.BAUD_RATE + this.GUARD_GAP);
 
         // 3. PAYLOAD DATA (4 bits per symbol)
+        console.log("[TX] Streaming payload...");
         for (let i = 0; i < payloadBytes.length; i++) {
             const byte = payloadBytes[i];
             
@@ -92,9 +92,8 @@ const AudioPipeline = {
                 const activeFreqs = [];
                 const shift = nibbleIdx * 4;
                 const nibble = (byte >> shift) & 0x0F;
-                console.log(`[TX] Transferring nibble: 0x${nibble.toString(16).toUpperCase()} (Binary: ${nibble.toString(2).padStart(4, '0')})`);
 
-                // Map bits to frequency lanes (Lane 0=13k, Lane 1=14k, Lane 2=15k, Lane 3=16k)
+                // Map bits to frequency lanes
                 for (let bit = 0; bit < 4; bit++) {
                     if ((nibble >> bit) & 1) activeFreqs.push(this.LANE_FREQS[bit]);
                 }
@@ -121,7 +120,7 @@ const AudioPipeline = {
         if (this.isListening) return;
 
         try {
-            // Bypass Apple's aggressive voice-isolation DSP
+            // Bypass OS-level voice-isolation DSP
             this.micStream = await navigator.mediaDevices.getUserMedia({ 
                 audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false }, 
                 video: false 
@@ -157,7 +156,6 @@ const AudioPipeline = {
             const sampleRate = this.audioCtx.sampleRate;
             const fftSize = this.analyser.fftSize;
 
-            // Tight 40Hz search radius to prevent spectral leakage
             const getPeak = (freq) => {
                 const minBin = Math.floor(((freq - 40) * fftSize) / sampleRate);
                 const maxBin = Math.ceil(((freq + 40) * fftSize) / sampleRate);
@@ -169,8 +167,14 @@ const AudioPipeline = {
             };
 
             const startMag = getPeak(this.START_FREQ);
-            const syncMag  = getPeak(this.SYNC_FREQ);
             const endMag   = getPeak(this.END_FREQ);
+            
+            const laneMags = [
+                getPeak(this.LANE_FREQS[0]), // Bit 0
+                getPeak(this.LANE_FREQS[1]), // Bit 1
+                getPeak(this.LANE_FREQS[2]), // Bit 2
+                getPeak(this.LANE_FREQS[3])  // Bit 3
+            ];
 
             // STATE 1: IDLE
             if (state === 'IDLE') {
@@ -185,17 +189,21 @@ const AudioPipeline = {
             else if (state === 'AWAIT_CLEARANCE') {
                 if (startMag < this.THRESHOLD - 10) {
                     state = 'AWAIT_SYNC';
-                    console.log("%c[RX 2/4] Awaiting Pilot Sync...", "color: #eab308; font-weight: bold;");
+                    console.log("%c[RX 2/4] Awaiting 1111 Sync Frame...", "color: #eab308; font-weight: bold;");
                 }
             }
 
-            // STATE 3: AWAIT_SYNC
+            // STATE 3: AWAIT_SYNC (Require all 4 bits ON)
             else if (state === 'AWAIT_SYNC') {
-                if (syncMag > this.THRESHOLD) {
+                const is1111 = laneMags.every(mag => mag >= this.THRESHOLD);
+                
+                if (is1111) {
                     state = 'RECORDING';
-                    // Align sample clock to start half a symbol after sync ends
-                    lastBitTime = Date.now() + 100; 
-                    console.log("%c[RX 3/4] Clock Synced! Decoding payload...", "color: #3b82f6; font-weight: bold;");
+                    // Align clock: We are currently inside the 1111 pulse. 
+                    // Setting lastBitTime to now perfectly positions the next sample 
+                    // in the middle of the first payload pulse (BAUD_RATE + GUARD_GAP away).
+                    lastBitTime = Date.now(); 
+                    console.log("%c[RX 3/4] CLOCK LOCKED! 1111 Sync Frame verified.", "color: #3b82f6; font-weight: bold;");
                 }
             }
 
@@ -205,13 +213,6 @@ const AudioPipeline = {
                 const frameInterval = this.BAUD_RATE + this.GUARD_GAP;
 
                 if (now - lastBitTime >= frameInterval) {
-                    const laneMags = [
-                        getPeak(this.LANE_FREQS[0]), // Bit 0
-                        getPeak(this.LANE_FREQS[1]), // Bit 1
-                        getPeak(this.LANE_FREQS[2]), // Bit 2
-                        getPeak(this.LANE_FREQS[3])  // Bit 3
-                    ];
-
                     const maxLanePeak = Math.max(...laneMags);
 
                     // Dynamic Thresholding: A lane is "1" if it is at least 60% of the peak tone present
@@ -226,9 +227,6 @@ const AudioPipeline = {
 
                     // Push MSB -> LSB (Lane 3 -> Lane 0)
                     receivedBits.push(currentNibble[3], currentNibble[2], currentNibble[1], currentNibble[0]);
-
-                    const nibbleVal = (currentNibble[3] << 3) | (currentNibble[2] << 2) | (currentNibble[1] << 1) | currentNibble[0];
-                    console.log(`[RX] Nibble ${receivedBits.length / 4}: [${currentNibble[3]}${currentNibble[2]}${currentNibble[1]}${currentNibble[0]}] (Val: ${nibbleVal})`);
                     
                     lastBitTime = now;
 
@@ -244,10 +242,10 @@ const AudioPipeline = {
                 }
             }
 
-            requestAnimationFrame(pollAudio);
+            this.animationId = requestAnimationFrame(pollAudio);
         };
 
-        pollingInterval = setInterval(pollAudio, 25);
+        this.animationId = requestAnimationFrame(pollAudio);
     },
 
     finishReception: function(receivedBits, onDataComplete) {
@@ -271,15 +269,20 @@ const AudioPipeline = {
 
     stopReceiver: function() {
         this.isListening = false;
-        if (this.micStream) this.micStream.getTracks().forEach(track => track.stop());
+        if (this.animationId) {
+            cancelAnimationFrame(this.animationId);
+            this.animationId = null;
+        }
+        if (this.micStream) {
+            this.micStream.getTracks().forEach(track => track.stop());
+            this.micStream = null;
+        }
     },
 
     sleep: function(ms) {
         return new Promise(resolve => setTimeout(resolve, ms));
     },
 
-    // GATE 2 TEST HARNESS (Transmits 0xAA)
-    //hallo
     transmitTestByte: async function() {
         if (!this.audioCtx) this.init();
         console.log("%c[TX] Sending test byte (10101010)...", "color: #f59e0b; font-weight: bold;");

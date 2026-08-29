@@ -43,8 +43,8 @@ const DataPipeline = {
                 return actualData;
             }
         } catch (error) {
-            console.error("Decompression failed. Audio frame corrupted.", error);
-            return null;
+           console.warn("[DataPipeline] Acoustic frame dropped/corrupted during decompression.");
+        return null;
         }
     }
 };
