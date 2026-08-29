@@ -20,9 +20,9 @@ const AudioPipeline = {
     // ----------------------------------------------------
     // TIMING CONSTRAINTS
     // ----------------------------------------------------
-    BAUD_RATE: 45,     // Duration of each tone pulse (ms)
-    GUARD_GAP: 35,     // Dead-air between pulses to stop echo overlap (ms)
-    THRESHOLD: 30,     // Absolute amplitude required for markers/sync
+    BAUD_RATE: 100,     // Duration of each tone pulse (ms)
+    GUARD_GAP: 350,     // Dead-air between pulses to stop echo overlap (ms)
+    THRESHOLD: 80,     // Absolute amplitude required for markers/sync
 
     init: function() {
         if (!this.audioCtx) {
@@ -176,6 +176,23 @@ const AudioPipeline = {
             const endMag   = getPeak(this.END_FREQ);
             const mag0     = getPeak(this.FREQ_0);
             const mag1     = getPeak(this.FREQ_1);
+
+            const now = Date.now();
+
+            // NEW: Reset the silence timer if ANY of our modem frequencies are loud enough
+            if (startMag > this.THRESHOLD || syncMag > this.THRESHOLD || endMag > this.THRESHOLD || mag0 > this.THRESHOLD || mag1 > this.THRESHOLD) {
+                lastSignalTime = now;
+            }
+
+            // NEW: If we are recording but haven't heard a tone in 600ms, force quit.
+            if (state === 'RECORDING' && (now - lastSignalTime > 600)) {
+                console.warn("[RX] Silence timeout! Transmitter stopped. Forcing completion.");
+                this.finishReception(receivedBits, onDataComplete);
+                return;
+            }
+
+            // STATE 1: IDLE
+            // ... (rest of your existing state logic remains unchanged)
 
             // STATE 1: IDLE
             if (state === 'IDLE') {
