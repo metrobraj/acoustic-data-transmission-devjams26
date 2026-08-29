@@ -1,54 +1,41 @@
 // js/data.js
-const pako = require('pako');
+
 const DataPipeline = {
-    /**
-     * Converts a string to a binary array and compresses it.
-     * @param {string} payloadText - The message to send.
-     * @returns {Uint8Array} - The compressed binary data ready for audio modulation.
-     */
     compressPayload: function(payloadText) {
-        // 1. Convert text to a Uint8Array
         const encoder = new TextEncoder();
         const rawBytes = encoder.encode(payloadText);
         
-        // 2. Compress the bytes using DEFLATE
+        // Compress using pako
         const compressedBytes = pako.deflate(rawBytes);
         
-        // Log the compression ratio to the console for your demo
-        console.log(`Payload shrunk from ${rawBytes.length} to ${compressedBytes.length} bytes.`);
-        
-        return compressedBytes;
+        // SMART CHECK: Only use compressed version if it actually saved space
+        if (compressedBytes.length < rawBytes.length) {
+            console.log(`[Compression Active] Shrunk from ${rawBytes.length} to ${compressedBytes.length} bytes.`);
+            // Return array with a flag byte (0x01 = Compressed)
+            const result = new Uint8Array(compressedBytes.length + 1);
+            result[0] = 1; 
+            result.set(compressedBytes, 1);
+            return result;
+        } else {
+            console.log(`[Raw Payload Kept] Original (${rawBytes.length}B) was smaller than compressed (${compressedBytes.length}B).`);
+            // Return raw array with a flag byte (0x00 = Uncompressed)
+            const result = new Uint8Array(rawBytes.length + 1);
+            result[0] = 0; 
+            result.set(rawBytes, 1);
+            return result;
+        }
     },
 
-    /**
-     * Inflates a compressed binary array back into readable text.
-     * @param {Uint8Array} compressedBytes - The data received from the microphone.
-     * @returns {string} - The decoded original message.
-     */
-    decompressPayload: function(compressedBytes) {
-        try {
-            // 1. Inflate the binary data
-            const decompressedBytes = pako.inflate(compressedBytes);
-            
-            // 2. Convert binary back to string
-            const decoder = new TextDecoder();
-            return decoder.decode(decompressedBytes);
-        } catch (error) {
-            console.error("Decompression failed. The audio packet might be corrupted.", error);
-            return null;
+    decompressPayload: function(payloadBytes) {
+        const isCompressed = payloadBytes[0] === 1;
+        const actualData = payloadBytes.subarray(1);
+        const decoder = new TextDecoder();
+
+        if (isCompressed) {
+            const decompressed = pako.inflate(actualData);
+            return decoder.decode(decompressed);
+        } else {
+            return decoder.decode(actualData);
         }
     }
 };
-
-// // --- RUN TEST ---
-// const testMessage = "Hello World! This is an air-gapped transmission test for AirChirp. Repeating text compresses exceptionally well in DEFLATE!";
-// console.log("Input Text:", testMessage);
-// console.log("--------------------------------------------------");
-
-// const compressed = DataPipeline.compressPayload(testMessage);
-// const decompressed = DataPipeline.decompressPayload(compressed);
-
-// console.log("--------------------------------------------------");
-// console.log("Output Text:", decompressed);
-// console.log("Test Passed:", testMessage === decompressed);
-
