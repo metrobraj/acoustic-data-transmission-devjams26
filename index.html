@@ -1,57 +1,63 @@
 <!DOCTYPE html>
 <html lang="en">
-    <head>
-        <meta charset="UTF-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>AirChirp</title>
-
-        <!--external library&font-->
-        <!-- Replace pako script with fflate -->
-        <script src="https://cdn.jsdelivr.net/npm/fflate@0.8.2/umd/index.js"></script>
-        <!-- <script src="https://cdnjs.cloudflare.com/ajax/libs/pako/2.1.0/pako.min.js"></script> -->
-        <link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;700&display=swap" rel="stylesheet">
-        <link rel="stylesheet" href="css/style.css">
-        </head>
-    <body>
-        <div class="appcontain">
-            <!--headersection-->
-            <header class="cyberheader">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AirChirp // Secure Ethereal Link</title>
+    
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pako/2.1.0/pako.min.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+    <div class="app-container">
+        
+        <!-- Header Section -->
+        <header class="cyber-header">
+            <div class="header-titles">
                 <h1>AIRCHIRP // SECURE ACOUSTIC LINK</h1>
-                <div class = "status">
-                    <span class="dot offline"></span>
-                    <span class="statustext">SYSTEM STANDBY || AWAITING MODE TYPE</span>
-                </div>
-            </header>
-            <!--main dashboard-->
+                <p class="subtitle">SYSTEM STANDBY // AWAITING MODE TYPE</p>
+            </div>
+            <div class="status-indicator">
+                <span class="dot standby" id="statusDot"></span>
+            </div>
+        </header>
 
-            <main class="dashboard">
-                <!--security work-->
-                <section class="panel security-panel">
-                    <h2>[ ENCRYPTION KEY ]</h2>
-                    <input type="password" id="secretKey" placeholder="ENTER KEY" />
-                </section>
-                <!-- 1. Mode Selection Screen (Visible Initially) -->
-                <section class="panel mode-selection" id="modeSelector">
-                    <h2>[ SELECT TERMINAL ROLE ]</h2>
-                    <div class="button-group">
-                        <button id="btnSelectTx" class="btn-large btn-tx">ENGAGE TRANSMITTER (TX)</button>
-                        <button id="btnSelectRx" class="btn-large btn-rx">ENGAGE RECEIVER (RX)</button>
-                    </div>
-                </section>
-                <!-- Dynamic Workspace -->
+        <main class="dashboard">
+            
+            <!-- Global Security Settings -->
+            <section class="panel security-panel">
+                <h2>[ ENCRYPTION KEY ]</h2>
+                <input type="password" id="secretKey" placeholder="E N T E R   K E Y" />
+            </section>
+
+            <!-- Apple-Style Mode Selector -->
+            <section class="panel mode-selector">
+                <h2>[ SELECT TERMINAL ROLE ]</h2>
+                <div class="segmented-control">
+                    <span class="glider"></span>
+                    <button id="btnModeTx" class="segment-btn active">ENGAGE TRANSMITTER (TX)</button>
+                    <button id="btnModeRx" class="segment-btn">ENGAGE RECEIVER (RX)</button>
+                </div>
+            </section>
+
+            <!-- Dynamic Workspace -->
             <div id="dynamicWorkspace">
                 
                 <!-- Transmitter UI (File Upload) -->
                 <section id="txPanel" class="panel workspace-panel">
                     <h2>[ TX // SELECT FILE ]</h2>
+                    
                     <div class="file-drop-zone">
                         <input type="file" id="fileInput" class="file-input" />
                         <label for="fileInput" class="file-label">Click to Browse or Drag File Here</label>
                     </div>
+                    
                     <div class="file-metadata">
                         <span id="fileName">No file selected.</span>
                         <span id="fileSize">0 KB</span>
                     </div>
+                    
                     <button id="btnTransmit" class="btn-primary" disabled>INITIATE CHIRP</button>
                 </section>
 
@@ -59,14 +65,15 @@
                 <section id="rxPanel" class="panel workspace-panel hidden">
                     <h2>[ RX // AWAITING DATA ]</h2>
                     <button id="btnReceive" class="btn-secondary">OPEN MIC BUFFER</button>
+                    
                     <div class="download-zone hidden" id="downloadZone">
-                        <p>File Decoded Successfully!</p>
-                        <!-- JavaScript will inject the file data into this link -->
-                        <a id="downloadLink" class="btn-download" download>Download File</a>
+                        <p style="margin-bottom: 15px; color: #7ed321;">File Decoded Successfully!</p>
+                        <a id="downloadLink" class="btn-download" download>DOWNLOAD SECURE FILE</a>
                     </div>
                 </section>
                 
             </div>
+
             <!-- Spectrogram Visualization -->
             <section class="panel visualizer-panel">
                 <h2>[ REAL-TIME FFT ANALYSIS ]</h2>
@@ -74,13 +81,13 @@
                     <canvas id="spectrogramCanvas"></canvas>
                 </div>
             </section>
-            </main>
+            
+        </main>
+    </div>
 
-        </div>
+    <script src="js/app.js"></script>
+    <script src="js/data.js"></script>
+     <script src="js/audio.js"></script>
 
-        <!-- Calling js files -->
-        <script src="js/data.js"></script>
-        <script src="js/audio.js"></script>
-        <script src="js/app.js"></script>
-    </body>
+</body>
 </html>

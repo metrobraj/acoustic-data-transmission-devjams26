@@ -1,14 +1,14 @@
 /* =========================================
-   1. CSS VARIABLES: ETHEREAL THEME
+   1. CSS VARIABLES: LIGHT ETHEREAL THEME
    ========================================= */
 :root {
-    --glass-bg: rgba(255, 255, 255, 0.03);
-    --glass-border: rgba(255, 255, 255, 0.15);
-    --glass-highlight: rgba(255, 255, 255, 0.3);
-    --text-primary: #ffffff;
-    --text-muted: rgba(255, 255, 255, 0.6);
-    --accent-glow: #7ee8fa;
-    --accent-purple: #80ff72;
+    --bg-main: #f8fafc;
+    --glass-bg: rgba(255, 255, 255, 0.65);
+    --glass-border: rgba(255, 255, 255, 0.8);
+    --glass-highlight: rgba(255, 255, 255, 1);
+    --text-primary: #0f172a;
+    --text-muted: #64748b;
+    --accent-blue: #0ea5e9;
     --font-main: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
     --font-mono: 'Fira Code', monospace;
 }
@@ -16,14 +16,10 @@
 /* =========================================
    2. GLOBAL RESET & FLUID BACKGROUND
    ========================================= */
-* {
-    box-sizing: border-box;
-    margin: 0;
-    padding: 0;
-}
+* { box-sizing: border-box; margin: 0; padding: 0; }
 
 body {
-    background-color: #0b0f19;
+    background-color: var(--bg-main);
     color: var(--text-primary);
     font-family: var(--font-main);
     overflow-x: hidden;
@@ -33,25 +29,25 @@ body {
     position: relative;
 }
 
-/* Ethereal Moving Gradient Orbs */
+/* Ethereal Moving Pastel Orbs */
 body::before, body::after {
     content: "";
     position: fixed;
     border-radius: 50%;
-    filter: blur(120px);
+    filter: blur(100px);
     z-index: -1;
     animation: float 20s infinite alternate ease-in-out;
 }
 
 body::before {
     width: 600px; height: 600px;
-    background: radial-gradient(circle, rgba(126,232,250,0.4) 0%, rgba(0,0,0,0) 70%);
+    background: radial-gradient(circle, rgba(161, 196, 253, 0.6) 0%, rgba(255,255,255,0) 70%); /* Soft sky blue */
     top: -100px; left: -100px;
 }
 
 body::after {
     width: 500px; height: 500px;
-    background: radial-gradient(circle, rgba(138,43,226,0.3) 0%, rgba(0,0,0,0) 70%);
+    background: radial-gradient(circle, rgba(253, 203, 241, 0.6) 0%, rgba(255,255,255,0) 70%); /* Soft peach/pink */
     bottom: -100px; right: -50px;
     animation-delay: -10s;
 }
@@ -60,108 +56,115 @@ body::after {
     width: 100%;
     max-width: 1100px;
     padding: 40px 20px;
-    animation: fadeUp 1s cubic-bezier(0.2, 0.8, 0.2, 1) forwards;
 }
 
 /* =========================================
-   3. HEADER TYPOGRAPHY
+   3. HEADER 
    ========================================= */
 .cyber-header {
     display: flex;
     justify-content: space-between;
     align-items: center;
     margin-bottom: 40px;
-    padding: 20px 30px;
-    border-radius: 24px;
+    padding: 30px 40px;
+    border-radius: 28px;
     background: var(--glass-bg);
-    backdrop-filter: blur(30px) saturate(150%);
-    -webkit-backdrop-filter: blur(30px) saturate(150%);
+    backdrop-filter: blur(40px) saturate(150%);
+    -webkit-backdrop-filter: blur(40px) saturate(150%);
+    
     border: 1px solid var(--glass-border);
-    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2), inset 0 1px 0 var(--glass-highlight);
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.05), inset 0 2px 0 var(--glass-highlight);
 }
 
-.cyber-header h1 {
-    font-size: 1.5rem;
+.header-titles h1 {
+    font-size: 1.8rem;
+    font-weight: 800;
+    margin-bottom: 5px;
+    letter-spacing: -0.5px;
+    color: var(--text-primary);
+}
+
+.subtitle {
+    color: var(--text-muted);
+    font-size: 0.95rem;
+    letter-spacing: 2px;
     font-weight: 500;
-    letter-spacing: 1px;
 }
 
-/* Apple-style Status Pill */
 .status-indicator {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    background: rgba(0, 0, 0, 0.2);
-    padding: 8px 16px;
-    border-radius: 30px;
-    font-size: 0.85rem;
-    border: 1px solid rgba(255, 255, 255, 0.05);
+    background: rgba(255, 255, 255, 0.8);
+    padding: 12px;
+    border-radius: 50%;
+    border: 1px solid rgba(0, 0, 0, 0.05);
+    box-shadow: 0 4px 10px rgba(0,0,0,0.05);
 }
 
-.dot { width: 8px; height: 8px; border-radius: 50%; }
-.dot.standby { background-color: #f5a623; box-shadow: 0 0 10px #f5a623; }
-.dot.active { background-color: #7ed321; box-shadow: 0 0 10px #7ed321; }
+.dot { display: block; width: 12px; height: 12px; border-radius: 50%; }
+.dot.standby { background-color: #f59e0b; box-shadow: 0 0 10px rgba(245, 158, 11, 0.4); }
 
 /* =========================================
-   4. APPLE-INSPIRED GLASS PANELS
+   4. LIGHT GLASS PANELS 
    ========================================= */
 .dashboard {
     display: grid;
     grid-template-columns: 1fr 1fr;
-    gap: 30px;
+    gap: 40px; 
+    margin-bottom: 40px;
 }
 
 .panel {
-    background: var(--glass-bg);
-    backdrop-filter: blur(40px) saturate(150%);
-    -webkit-backdrop-filter: blur(40px) saturate(150%);
+    background: var(--glass-bg); 
+    backdrop-filter: blur(40px) saturate(200%);
+    -webkit-backdrop-filter: blur(40px) saturate(200%);
+    
     border: 1px solid var(--glass-border);
-    border-radius: 28px;
-    padding: 30px;
-    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.15), inset 0 1px 0 var(--glass-highlight);
-    transition: transform 0.4s cubic-bezier(0.2, 0.8, 0.2, 1), box-shadow 0.4s ease;
+    border-top: 1px solid var(--glass-highlight);
+    border-left: 1px solid var(--glass-highlight);
+    
+    border-radius: 32px;
+    padding: 45px; 
+    box-shadow: 0 20px 50px rgba(0, 0, 0, 0.05);
+    transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 .panel:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 15px 40px rgba(0, 0, 0, 0.25), inset 0 1px 0 var(--glass-highlight);
+    box-shadow: 0 25px 60px rgba(0, 0, 0, 0.08);
 }
 
 .panel h2 {
-    font-size: 0.9rem;
-    font-weight: 600;
+    font-size: 0.85rem;
+    font-weight: 700;
     text-transform: uppercase;
     letter-spacing: 2px;
     color: var(--text-muted);
-    margin-bottom: 25px;
+    margin-bottom: 30px;
 }
 
-.visualizer-panel, .security-panel {
-    grid-column: 1 / -1;
-}
+.visualizer-panel, .security-panel { grid-column: 1 / -1; }
+.security-panel { margin-bottom: 20px; }
 
 /* =========================================
    5. INPUTS & FROSTED DROP ZONE
    ========================================= */
 input[type="password"] {
     width: 100%;
-    background: rgba(0, 0, 0, 0.15);
-    border: 1px solid var(--glass-border);
+    background: rgba(255, 255, 255, 0.8);
+    border: 1px solid rgba(0, 0, 0, 0.1);
     border-radius: 16px;
     color: var(--text-primary);
-    padding: 18px 20px;
+    padding: 20px;
     font-family: var(--font-mono);
     font-size: 1.2rem;
     outline: none;
-    letter-spacing: 4px;
+    letter-spacing: 8px;
+    box-shadow: inset 0 2px 6px rgba(0,0,0,0.02);
     transition: 0.3s;
-    box-shadow: inset 0 2px 5px rgba(0,0,0,0.2);
 }
 
 input[type="password"]:focus {
-    border-color: rgba(255, 255, 255, 0.4);
-    background: rgba(0, 0, 0, 0.25);
-    box-shadow: 0 0 15px rgba(126, 232, 250, 0.2), inset 0 2px 5px rgba(0,0,0,0.2);
+    border-color: var(--accent-blue);
+    background: #ffffff;
+    box-shadow: 0 0 0 4px rgba(14, 165, 233, 0.15);
 }
 
 .file-input { display: none !important; }
@@ -170,9 +173,9 @@ input[type="password"]:focus {
     display: flex;
     align-items: center;
     justify-content: center;
-    min-height: 140px;
-    background: rgba(255, 255, 255, 0.02);
-    border: 2px dashed rgba(255, 255, 255, 0.2);
+    min-height: 160px;
+    background: rgba(255, 255, 255, 0.4);
+    border: 2px dashed rgba(0, 0, 0, 0.15);
     border-radius: 20px;
     cursor: pointer;
     transition: all 0.3s ease;
@@ -180,106 +183,116 @@ input[type="password"]:focus {
 }
 
 .file-drop-zone:hover {
-    background: rgba(255, 255, 255, 0.06);
-    border-color: rgba(255, 255, 255, 0.5);
+    background: rgba(255, 255, 255, 0.8);
+    border-color: var(--accent-blue);
 }
 
 .file-label {
     color: var(--text-primary);
-    font-size: 1rem;
-    font-weight: 500;
+    font-size: 1.1rem;
+    font-weight: 600;
     pointer-events: none;
 }
 
 .file-metadata {
     display: flex;
     justify-content: space-between;
-    font-size: 0.9rem;
+    font-size: 0.95rem;
     color: var(--text-muted);
-    margin-bottom: 25px;
-    padding: 0 10px;
+    margin-bottom: 30px;
+    font-weight: 500;
 }
 
 /* =========================================
-   6. LUXURY GLASS BUTTONS
+   6. LIGHT MODE SEGMENTED CONTROLLER
    ========================================= */
-.toggle-container {
+.segmented-control {
     display: flex;
-    background: rgba(0, 0, 0, 0.2);
+    background: rgba(0, 0, 0, 0.04); /* Soft recessed track */
     padding: 6px;
-    border-radius: 20px;
-    border: 1px solid var(--glass-border);
+    border-radius: 22px;
+    box-shadow: inset 0 2px 6px rgba(0, 0, 0, 0.05);
+    position: relative;
+    overflow: hidden;
 }
 
-button {
-    font-family: var(--font-main);
-    font-size: 0.95rem;
-    font-weight: 500;
-    letter-spacing: 0.5px;
-    cursor: pointer;
-    border: none;
-    transition: all 0.4s cubic-bezier(0.2, 0.8, 0.2, 1);
+/* The Animated White Pill */
+.glider {
+    position: absolute;
+    top: 6px;
+    left: 6px;
+    width: calc(50% - 6px); 
+    height: calc(100% - 12px);
+    background: #ffffff;
+    border-radius: 16px;
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.08), 
+                0 1px 3px rgba(0, 0, 0, 0.05);
+    transition: transform 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+    z-index: 1;
 }
 
-/* Segmented Control (Apple Style Toggles) */
-.btn-mode {
+.segment-btn {
     flex: 1;
-    background: transparent;
+    background: transparent !important;
     color: var(--text-muted);
-    padding: 14px;
-    border-radius: 14px;
+    padding: 16px;
+    border-radius: 16px;
+    font-size: 0.9rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 1.5px;
+    border: none;
+    cursor: pointer;
+    position: relative;
+    z-index: 2; 
+    transition: color 0.3s ease;
+    box-shadow: none !important;
 }
 
-.btn-mode.active {
-    background: rgba(255, 255, 255, 0.1);
+.segment-btn.active {
     color: var(--text-primary);
-    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.2);
 }
 
-/* Primary Action Buttons */
+/* Action Buttons */
 .btn-primary, .btn-secondary, .btn-download {
     display: block;
     width: 100%;
-    padding: 18px;
-    background: linear-gradient(135deg, rgba(255, 255, 255, 0.1), rgba(255, 255, 255, 0.03));
+    padding: 20px;
+    background: #ffffff;
     color: var(--text-primary);
-    border: 1px solid var(--glass-border);
+    border: 1px solid rgba(0, 0, 0, 0.05);
     border-radius: 18px;
+    font-size: 1rem;
+    font-weight: 700;
+    letter-spacing: 1px;
     text-align: center;
-    text-decoration: none;
-    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1), inset 0 1px 0 var(--glass-highlight);
+    cursor: pointer;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+    transition: all 0.3s ease;
 }
 
 .btn-primary:hover:not(:disabled), .btn-secondary:hover {
-    background: linear-gradient(135deg, rgba(255, 255, 255, 0.2), rgba(255, 255, 255, 0.05));
-    transform: scale(1.02);
-    box-shadow: 0 8px 25px rgba(0, 0, 0, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.4);
+    transform: translateY(-2px);
+    box-shadow: 0 8px 20px rgba(0, 0, 0, 0.1);
+    border-color: rgba(0, 0, 0, 0.1);
 }
 
-button:disabled {
-    opacity: 0.4;
-    cursor: not-allowed;
-    transform: none !important;
-}
+button:disabled { opacity: 0.4; cursor: not-allowed; }
 
 /* =========================================
    7. CANVAS VISUALIZER
    ========================================= */
 .canvas-container {
     width: 100%;
-    height: 220px;
-    background: rgba(0, 0, 0, 0.2);
+    height: 250px;
+    /* Keeping the canvas dark makes the visualization pop nicely against the light theme */
+    background: #0f172a; 
     border-radius: 20px;
     overflow: hidden;
-    box-shadow: inset 0 4px 15px rgba(0, 0, 0, 0.3);
+    box-shadow: inset 0 4px 20px rgba(0, 0, 0, 0.5);
+    border: 1px solid rgba(0, 0, 0, 0.1);
 }
-
-canvas {
-    width: 100%;
-    height: 100%;
-    display: block;
-}
-
+canvas { width: 100%; height: 100%; display: block; }
 .hidden { display: none !important; }
 
 /* =========================================
@@ -287,10 +300,5 @@ canvas {
    ========================================= */
 @keyframes float {
     0% { transform: translate(0, 0) scale(1); }
-    100% { transform: translate(30px, -50px) scale(1.1); }
-}
-
-@keyframes fadeUp {
-    0% { opacity: 0; transform: translateY(20px); }
-    100% { opacity: 1; transform: translateY(0); }
+    100% { transform: translate(30px, -50px) scale(1.05); }
 }

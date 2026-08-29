@@ -67,3 +67,40 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 });
+
+document.addEventListener('DOMContentLoaded', () => {
+    const btnModeTx = document.getElementById('btnModeTx');
+    const btnModeRx = document.getElementById('btnModeRx');
+    const txPanel = document.getElementById('txPanel');
+    const rxPanel = document.getElementById('rxPanel');
+    const glider = document.querySelector('.glider');
+    const statusText = document.querySelector('.subtitle');
+
+    // Slide to Transmitter (Left)
+    btnModeTx.addEventListener('click', () => {
+        btnModeTx.classList.add('active');
+        btnModeRx.classList.remove('active');
+
+        // Move slider to left position
+        glider.style.transform = 'translateX(0%)';
+
+        txPanel.classList.remove('hidden');
+        rxPanel.classList.add('hidden');
+
+        if (statusText) statusText.textContent = "SYSTEM READY // TRANSMITTER (TX) MODE";
+    });
+
+    // Slide to Receiver (Right)
+    btnModeRx.addEventListener('click', () => {
+        btnModeRx.classList.add('active');
+        btnModeTx.classList.remove('active');
+
+        // Move slider to right position (100% offset)
+        glider.style.transform = 'translateX(100%)';
+
+        rxPanel.classList.remove('hidden');
+        txPanel.classList.add('hidden');
+
+        if (statusText) statusText.textContent = "SYSTEM READY // RECEIVER (RX) MODE";
+    });
+});
