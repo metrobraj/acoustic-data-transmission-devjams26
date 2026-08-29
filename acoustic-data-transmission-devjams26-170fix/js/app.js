@@ -47,26 +47,23 @@ document.addEventListener('DOMContentLoaded', () => {
             
             // UNLOCK AUDIO CONTEXT
             if (typeof AudioPipeline !== 'undefined') AudioPipeline.init();
-            
         });
     }
 
     // 4. File Handling Pipeline (With Drag & Drop Support)
     const dropZone = document.querySelector('.file-drop-zone');
 
-    // Helper function to process the file regardless of how it was added
     function processSelectedFile(file) {
         if (!file) return;
 
         fileName.textContent = file.name;
         fileSize.textContent = `${(file.size / 1024).toFixed(2)} KB`;
-        btnTransmit.disabled = false; // This unlocks the INITIATE CHIRP button
+        btnTransmit.disabled = false; // Unlocks the INITIATE CHIRP button
 
         const reader = new FileReader();
         reader.onload = function(e) {
             const rawBytes = new Uint8Array(e.target.result);
             
-            // Compress and get a pure Uint8Array ready for audio transmission
             if (typeof DataPipeline !== 'undefined') {
                 readyPayload = DataPipeline.compressPayload(rawBytes);
                 console.log("File loaded and compressed. Ready payload:", readyPayload);
@@ -84,7 +81,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Method B: Drag and Drop Mechanics
     if (dropZone) {
-        // Prevent default browser behavior (opening the file in a new tab)
         dropZone.addEventListener('dragover', (e) => {
             e.preventDefault();
             dropZone.style.borderColor = 'var(--accent-blue)';
@@ -99,44 +95,38 @@ document.addEventListener('DOMContentLoaded', () => {
 
         dropZone.addEventListener('drop', (e) => {
             e.preventDefault();
-            // Reset drop zone styling
             dropZone.style.borderColor = 'rgba(0, 0, 0, 0.15)';
             dropZone.style.background = 'rgba(255, 255, 255, 0.4)';
             
-            // Grab the dropped file and send it to our processor
             if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
                 processSelectedFile(e.dataTransfer.files[0]);
             }
         });
     }
+
     // 5. Transmit Button Handler
     if (btnTransmit) {
         btnTransmit.addEventListener('click', async () => {
             console.log("Transmit button clicked.");
 
-            // 1. Force initialize audio context on click if it wasn't already
             if (typeof AudioPipeline !== 'undefined') {
                 AudioPipeline.init();
             }
 
-            // 2. Safety check: Ensure payload is loaded
             if (!readyPayload || !(readyPayload instanceof Uint8Array)) {
                 console.warn("No payload loaded yet! Please select or drop a file first.");
                 alert("Please select or drop a file first!");
                 return;
             }
 
-            // --- VISUALIZER STEP 1: INITIALIZE ---
             if (typeof Visualizer !== 'undefined') {
                 Visualizer.init('spectrogramCanvas'); 
             }
 
-            // 3. Trigger transmission
             try {
                 btnTransmit.textContent = "TRANSMITTING...";
                 btnTransmit.disabled = true;
 
-                // --- VISUALIZER STEP 2: START DRAWING ---
                 if (typeof Visualizer !== 'undefined') Visualizer.start();
 
                 console.log("Starting transmission of payload:", readyPayload);
@@ -146,33 +136,66 @@ document.addEventListener('DOMContentLoaded', () => {
             } catch (error) {
                 console.error("Error during transmission:", error);
             } finally {
-                // --- VISUALIZER STEP 3: STOP DRAWING ---
                 if (typeof Visualizer !== 'undefined') Visualizer.stop();
 
                 btnTransmit.textContent = "INITIATE CHIRP";
                 btnTransmit.disabled = false;
             }
-
         });
     }
-    // --- ADD THIS INSIDE YOUR EXISTING DOMContentLoaded BLOCK ---
+
+    // 6. Receive Button Handler
     const btnReceive = document.getElementById('btnReceive');
     if (btnReceive) {
         btnReceive.addEventListener('click', async () => {
             btnReceive.textContent = "LISTENING FOR CHIRPS...";
             btnReceive.disabled = true;
-            
-            // Calls the receiver function we just added to audio.js
-            await AudioPipeline.startReceiver((finalBytes) => {
-                console.log("[RX] Payload successfully assembled:", finalBytes);
-                alert("File received successfully!");
-            });
 
-            // Update UI to active listening state
             const statusDot = document.getElementById('statusDot');
-            if(statusDot) statusDot.className = "dot active";
+            if (statusDot) statusDot.className = "dot active";
+
+            // Initialize visualizer for listening mode
+            if (typeof Visualizer !== 'undefined') {
+                Visualizer.init('spectrogramCanvas');
+                Visualizer.start();
+            }
+
+            // Unified ggwave receiver callback pipeline
+            await AudioPipeline.startReceiver((receivedUint8Array) => {
+                console.log(`[App] Signal decoded! Received ${receivedUint8Array.length} bytes.`);
+
+                // 1. Stop visualizer if running
+                if (typeof Visualizer !== 'undefined') Visualizer.stop();
+
+                // 2. Decompress the payload back to original file bytes using DataPipeline
+                const originalFileBytes = DataPipeline.decompressPayload(receivedUint8Array);
+
+                if (originalFileBytes) {
+                    // 3. Wrap raw bytes into a generic binary Blob
+                    const blob = new Blob([originalFileBytes], { type: 'application/octet-stream' });
+                    const blobUrl = URL.createObjectURL(blob);
+
+                    // 4. Update UI download link
+                    const downloadLink = document.getElementById('downloadLink');
+                    const downloadZone = document.getElementById('downloadZone');
+
+                    if (downloadLink && downloadZone) {
+                        downloadLink.href = blobUrl;
+                        downloadLink.download = `recovered_file_${Date.now()}`;
+                        downloadZone.classList.remove('hidden');
+                    }
+
+                    console.log("[App] File successfully reconstructed and ready for download!");
+                    alert("File received and ready for download!");
+                } else {
+                    console.error("[App] Decompression failed.");
+                    alert("File reconstruction failed. Payload data was corrupted.");
+                }
+
+                // Reset receiver button UI state
+                btnReceive.textContent = "ENGAGE RECEIVER";
+                btnReceive.disabled = false;
+            });
         });
     }
-
 });
-
