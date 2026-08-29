@@ -72,6 +72,23 @@ const AudioPipeline = {
 
     transmitPayload: async function(payloadBytes) {
         if (!this.audioCtx) this.init();
+        // --- PACKET ASSEMBLY: [len_hi][len_lo][...payloadBytes...][checksum] ---
+        const length = payloadBytes.length;
+        const lengthHigh = (length >> 8) & 0xFF;
+        const lengthLow  = length & 0xFF;
+
+        let checksum = 0;
+        for (let i = 0; i < payloadBytes.length; i++) {
+            checksum ^= payloadBytes[i];
+        }
+
+        const packet = new Uint8Array(payloadBytes.length + 3);
+        packet[0] = lengthHigh;
+        packet[1] = lengthLow;
+        packet.set(payloadBytes, 2);
+        packet[packet.length - 1] = checksum;
+
+        console.log(`[TX] Packet ready: length=${length}B checksum=${checksum}`);
         console.log(`[TX] Initiating transmission sequence for ${payloadBytes.length} bytes...`);
 
         // 1. PREAMBLE WAKEUP (17kHz for 300ms)
@@ -248,11 +265,35 @@ const AudioPipeline = {
         this.animationId = requestAnimationFrame(pollAudio);
     },
 
-    finishReception: function(receivedBits, onDataComplete) {
+        finishReception: function(receivedBits, onDataComplete) {
         this.stopReceiver();
-        const finalBytes = this.reconstructBytesFromBits(receivedBits);
-        console.log("%c[RX 4/4] SUCCESS! Array Reconstructed:", "color: #7ed321; font-weight: bold; font-size: 14px;", finalBytes);
-        if (onDataComplete) onDataComplete(finalBytes);
+        const rawBytes = this.reconstructBytesFromBits(receivedBits);
+
+        if (rawBytes.length < 3) {
+            console.error("[RX] Packet too short to contain header+checksum.");
+            if (onDataComplete) onDataComplete(null);
+            return;
+        }
+
+        // Parse length header
+        const expectedLength = (rawBytes[0] << 8) | rawBytes[1];
+        const payload = rawBytes.slice(2, 2 + expectedLength);
+        const receivedChecksum = rawBytes[2 + expectedLength];
+
+        // Recompute checksum
+        let computedChecksum = 0;
+        for (let i = 0; i < payload.length; i++) {
+            computedChecksum ^= payload[i];
+        }
+
+        if (computedChecksum !== receivedChecksum) {
+            console.error(`%c[RX] CHECKSUM MISMATCH! Expected ${receivedChecksum}, got ${computedChecksum}. Packet corrupted.`, "color: red; font-weight: bold;");
+            if (onDataComplete) onDataComplete(null);
+            return;
+        }
+
+        console.log("%c[RX 4/4] SUCCESS! Checksum verified. Payload:", "color: #7ed321; font-weight: bold; font-size: 14px;", payload);
+        if (onDataComplete) onDataComplete(payload);
     },
 
     reconstructBytesFromBits: function(bits) {

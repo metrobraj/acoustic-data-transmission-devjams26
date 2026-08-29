@@ -172,9 +172,18 @@ document.addEventListener('DOMContentLoaded', () => {
 
             // Call your custom MFSK receiver
             await AudioPipeline.startReceiver((receivedUint8Array) => {
+                if (typeof Visualizer !== 'undefined') Visualizer.stop();
+
+                if (!receivedUint8Array) {
+                    console.error("[App] Packet failed checksum verification.");
+                    alert("Transmission failed checksum verification. Please try again.");
+                    btnReceive.textContent = "ENGAGE RECEIVER";
+                    btnReceive.disabled = false;
+                    if (statusDot) statusDot.className = "dot";
+                    return;
+                }
                 console.log(`[App] MFSK Signal decoded! Received ${receivedUint8Array.length} bytes.`);
 
-                if (typeof Visualizer !== 'undefined') Visualizer.stop();
 
                 // Decompress the payload back to original file bytes
                 const originalFileBytes = DataPipeline.decompressPayload(receivedUint8Array);
