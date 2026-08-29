@@ -119,6 +119,7 @@ const AudioPipeline = {
             const source = this.audioCtx.createMediaStreamSource(this.micStream);
             this.analyser = this.audioCtx.createAnalyser();
             this.analyser.fftSize = 2048; 
+            this.analyser.smoothingTimeConstant = 0;
             source.connect(this.analyser);
 
             this.isListening = true;
@@ -194,10 +195,21 @@ const AudioPipeline = {
                 const frameInterval = this.BAUD_RATE + this.GUARD_GAP;
 
                 if (now - lastBitTime >= frameInterval) {
-                    const currentNibble = [0, 0, 0, 0];
+                    // Grab all 4 lane magnitudes at once
+                    const laneMags = [
+                        getPeak(this.LANE_FREQS[0]),
+                        getPeak(this.LANE_FREQS[1]),
+                        getPeak(this.LANE_FREQS[2]),
+                        getPeak(this.LANE_FREQS[3])
+                    ];
 
+                    // Threshold relative to the loudest lane THIS symbol
+                    const maxLanePeak = Math.max(...laneMags);
+                    const dynamicCutoff = Math.max(this.THRESHOLD, maxLanePeak * 0.6);
+
+                    const currentNibble = [0, 0, 0, 0];
                     for (let i = 0; i < 4; i++) {
-                        if (getPeak(this.LANE_FREQS[i]) > this.THRESHOLD) {
+                        if (laneMags[i] >= dynamicCutoff) {
                             currentNibble[i] = 1;
                         }
                     }
