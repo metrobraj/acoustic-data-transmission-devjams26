@@ -24,7 +24,7 @@ const AudioPipeline = {
     // TIMING CONSTRAINTS (Tuned for Large Room Acoustics)
     // ----------------------------------------------------
     BAUD_RATE: 45,     // Duration of each tone pulse (ms)
-    GUARD_GAP: 25,     // Dead-air between pulses to stop echo overlap (ms)
+    GUARD_GAP: 35,     // Dead-air between pulses to stop echo overlap (ms)
     THRESHOLD: 35,     // Amplitude required to register a 1 (out of 255)
 
     init: function() {
