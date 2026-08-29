@@ -269,6 +269,7 @@ const AudioPipeline = {
     },
 
     // GATE 2 TEST HARNESS (Transmits 0xAA)
+    //hallo
     transmitTestByte: async function() {
         if (!this.audioCtx) this.init();
         console.log("%c[TX] Sending test byte (10101010)...", "color: #f59e0b; font-weight: bold;");
