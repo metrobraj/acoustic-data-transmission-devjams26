@@ -67,13 +67,13 @@ const AudioPipeline = {
         if (!this.audioCtx) this.init();
         console.log(`[TX] Broadcasting ${payloadBytes.length} bytes...`);
 
-        // 1. PREAMBLE WAKEUP
+        // 1. PREAMBLE WAKEUP (17kHz for 300ms)
         this.playParallelTones([this.START_FREQ], 300);
-        await this.sleep(400); // Wait for auditorium echo to clear
+        await this.sleep(350); 
 
-        // 2. PILOT SYNC (Aligns receiver clock)
-        this.playParallelTones([this.SYNC_FREQ], 80);
-        await this.sleep(80 +   50 + this.GUARD_GAP);
+        // 2. PILOT SYNC (16.5kHz for 100ms)
+        this.playParallelTones([this.SYNC_FREQ], 100);
+        await this.sleep(100 + this.GUARD_GAP + 50);
 
         // 3. PAYLOAD DATA (4 bits per symbol)
         for (let i = 0; i < payloadBytes.length; i++) {
@@ -84,6 +84,7 @@ const AudioPipeline = {
                 const shift = nibbleIdx * 4;
                 const nibble = (byte >> shift) & 0x0F;
 
+                // Map bits to frequency lanes (Lane 0=13k, Lane 1=14k, Lane 2=15k, Lane 3=16k)
                 for (let bit = 0; bit < 4; bit++) {
                     if ((nibble >> bit) & 1) activeFreqs.push(this.LANE_FREQS[bit]);
                 }
@@ -130,11 +131,11 @@ const AudioPipeline = {
         }
     },
 
-    listenLoop: function(onDataComplete, targetByteLength) {
+    listenLoop: function(onDataComplete, targetByteLength = null) {
         const bufferLength = this.analyser.frequencyBinCount;
         const dataArray = new Uint8Array(bufferLength);
 
-        let state = 'IDLE'; // IDLE -> AWAIT_CLEARANCE -> AWAIT_SYNC -> RECORDING
+        let state = 'IDLE'; 
         let receivedBits = [];
         let lastBitTime = 0;
         const expectedBits = targetByteLength ? targetByteLength * 8 : Infinity;
@@ -146,10 +147,10 @@ const AudioPipeline = {
             const sampleRate = this.audioCtx.sampleRate;
             const fftSize = this.analyser.fftSize;
 
-            // Tight +/- 100Hz isolation to eliminate overlapping bin logic
+            // Tight 40Hz search radius to prevent spectral leakage
             const getPeak = (freq) => {
-                const minBin = Math.floor(((freq - 50) * fftSize) / sampleRate);
-                const maxBin = Math.ceil(((freq + 50) * fftSize) / sampleRate);
+                const minBin = Math.floor(((freq - 40) * fftSize) / sampleRate);
+                const maxBin = Math.ceil(((freq + 40) * fftSize) / sampleRate);
                 let max = 0;
                 for (let i = minBin; i <= maxBin; i++) {
                     if (dataArray[i] > max) max = dataArray[i];
@@ -161,67 +162,72 @@ const AudioPipeline = {
             const syncMag  = getPeak(this.SYNC_FREQ);
             const endMag   = getPeak(this.END_FREQ);
 
-            // STATE 1: IDLE (Scan for 17kHz Wakeup)
+            // STATE 1: IDLE
             if (state === 'IDLE') {
                 if (startMag > this.THRESHOLD) {
                     state = 'AWAIT_CLEARANCE';
                     receivedBits = [];
-                    console.log("%c[RX 1/4] Preamble Detected. Awaiting echo clearance...", "color: #f59e0b; font-weight: bold;");
+                    console.log("%c[RX 1/4] Preamble Detected.", "color: #f59e0b; font-weight: bold;");
                 }
             }
 
-            // STATE 2: CLEARANCE (Wait for 17kHz to fade out in the auditorium)
+            // STATE 2: AWAIT_CLEARANCE
             else if (state === 'AWAIT_CLEARANCE') {
                 if (startMag < this.THRESHOLD - 10) {
                     state = 'AWAIT_SYNC';
-                    console.log("%c[RX 2/4] Channel Clear. Awaiting Pilot Sync...", "color: #eab308; font-weight: bold;");
+                    console.log("%c[RX 2/4] Awaiting Pilot Sync...", "color: #eab308; font-weight: bold;");
                 }
             }
 
-            // STATE 3: SYNC (Lock clock exactly to the 16.5kHz pilot tone)
+            // STATE 3: AWAIT_SYNC
             else if (state === 'AWAIT_SYNC') {
                 if (syncMag > this.THRESHOLD) {
                     state = 'RECORDING';
-                    // Set clock to sample precisely in the middle of the upcoming data pulses
-                    lastBitTime = Date.now() + (this.BAUD_RATE + this.GUARD_GAP); 
-                    console.log("%c[RX 3/4] Clock Synced! Recording bits...", "color: #3b82f6; font-weight: bold;");
+                    // Align sample clock to start half a symbol after sync ends
+                    lastBitTime = Date.now() + 100; 
+                    console.log("%c[RX 3/4] Clock Synced! Decoding payload...", "color: #3b82f6; font-weight: bold;");
                 }
             }
 
-            // STATE 4: RECORDING (Read exact byte chunks)
+            // STATE 4: RECORDING (Self-Clocking Sampling)
             else if (state === 'RECORDING') {
                 const now = Date.now();
                 const frameInterval = this.BAUD_RATE + this.GUARD_GAP;
 
                 if (now - lastBitTime >= frameInterval) {
-                    const currentNibble = [0, 0, 0, 0];
+                    const laneMags = [
+                        getPeak(this.LANE_FREQS[0]), // Bit 0
+                        getPeak(this.LANE_FREQS[1]), // Bit 1
+                        getPeak(this.LANE_FREQS[2]), // Bit 2
+                        getPeak(this.LANE_FREQS[3])  // Bit 3
+                    ];
 
+                    const maxLanePeak = Math.max(...laneMags);
+
+                    // Dynamic Thresholding: A lane is "1" if it is at least 60% of the peak tone present
+                    const dynamicCutoff = Math.max(this.THRESHOLD, maxLanePeak * 0.6);
+
+                    const currentNibble = [0, 0, 0, 0];
                     for (let i = 0; i < 4; i++) {
-                        if (getPeak(this.LANE_FREQS[i]) > this.THRESHOLD) {
+                        if (laneMags[i] >= dynamicCutoff) {
                             currentNibble[i] = 1;
                         }
                     }
 
-                    // Push bits strictly from Lane 3 (MSB) down to Lane 0 (LSB)
-                    receivedBits.push(
-                        currentNibble[3], 
-                        currentNibble[2], 
-                        currentNibble[1], 
-                        currentNibble[0]
-                    );
+                    // Push MSB -> LSB (Lane 3 -> Lane 0)
+                    receivedBits.push(currentNibble[3], currentNibble[2], currentNibble[1], currentNibble[0]);
 
-                    const binaryStr = `${currentNibble[3]}${currentNibble[2]}${currentNibble[1]}${currentNibble[0]}`;
-                    console.log(`[RX] Nibble ${receivedBits.length/4}: ${binaryStr}`);
+                    const nibbleVal = (currentNibble[3] << 3) | (currentNibble[2] << 2) | (currentNibble[1] << 1) | currentNibble[0];
+                    console.log(`[RX] Nibble ${receivedBits.length / 4}: [${currentNibble[3]}${currentNibble[2]}${currentNibble[1]}${currentNibble[0]}] (Val: ${nibbleVal})`);
+                    
                     lastBitTime = now;
 
-                    // Stop condition A: Reached exact strict length
                     if (receivedBits.length >= expectedBits) {
                         this.finishReception(receivedBits, onDataComplete);
                         return;
                     }
                 }
 
-                // Stop condition B: Detected End frequency (useful for unknown file sizes)
                 if (endMag > this.THRESHOLD && receivedBits.length >= 8) {
                     this.finishReception(receivedBits, onDataComplete);
                     return;
