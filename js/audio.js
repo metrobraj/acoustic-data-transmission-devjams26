@@ -146,6 +146,7 @@ const AudioPipeline = {
             const source = this.audioCtx.createMediaStreamSource(this.micStream);
             this.analyser = this.audioCtx.createAnalyser();
             this.analyser.fftSize = 2048; 
+            this.analyser.smoothingTimeConstant = 0;
             source.connect(this.analyser);
 
             this.isListening = true;
