@@ -1,0 +1,322 @@
+/* =========================================
+   1. CSS VARIABLES & ADVANCED THEME
+   ========================================= */
+:root {
+    --bg-main: #050608;
+    --bg-panel: rgba(10, 14, 23, 0.7);
+    --accent-cyan: #77d779;
+    --accent-cyan-dim: rgba(0, 240, 255, 0.2);
+    --accent-red: #ff003c;
+    --accent-green: #39ff14;
+    --text-main: #e0e6ed;
+    --text-muted: #4a5568;
+    --font-mono: 'Fira Code', monospace;
+    --glow-cyan: 0 0 15px rgba(0, 240, 255, 0.6), 0 0 30px rgba(0, 240, 255, 0.2);
+}
+
+/* =========================================
+   2. GLOBAL RESET & CRT OVERLAY
+   ========================================= */
+* {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+}
+
+body {
+    background-color: var(--bg-main);
+    color: var(--text-main);
+    font-family: var(--font-mono);
+    overflow-x: hidden;
+    position: relative;
+    min-height: 100vh;
+}
+
+/* Animated Grid Background */
+body::before {
+    content: "";
+    position: absolute;
+    top: 0; left: 0; width: 100%; height: 100%;
+    background-image: 
+        linear-gradient(rgba(0, 240, 255, 0.05) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(0, 240, 255, 0.05) 1px, transparent 1px);
+    background-size: 40px 40px;
+    z-index: -2;
+    animation: backgroundDrift 20s linear infinite;
+}
+
+/* CRT Scanline Effect */
+body::after {
+    content: "";
+    position: fixed;
+    top: 0; left: 0; width: 100%; height: 100vh;
+    background: linear-gradient(
+        to bottom,
+        rgba(255,255,255,0),
+        rgba(255,255,255,0) 50%,
+        rgba(0,0,0,0.05) 50%,
+        rgba(0,0,0,0.05)
+    );
+    background-size: 100% 4px;
+    z-index: 999;
+    pointer-events: none; /* Allows clicking through the scanlines */
+}
+
+.app-container {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 30px 20px;
+    animation: bootUp 1.2s cubic-bezier(0.1, 0.8, 0.3, 1) forwards;
+}
+
+/* =========================================
+   3. HEADER & GLITCH TEXT
+   ========================================= */
+.cyber-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-bottom: 2px solid var(--accent-cyan);
+    padding-bottom: 15px;
+    margin-bottom: 30px;
+    position: relative;
+}
+
+.cyber-header h1 {
+    font-size: 2rem;
+    color: var(--accent-cyan);
+    text-shadow: var(--glow-cyan);
+    letter-spacing: 4px;
+    position: relative;
+}
+
+/* Status Indicator with hardware blink */
+.status-indicator {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    background: rgba(57, 255, 20, 0.1);
+    padding: 8px 16px;
+    border: 1px solid var(--accent-green);
+    border-radius: 2px;
+    font-weight: bold;
+    color: var(--accent-green);
+}
+
+.dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+}
+.dot.standby { background-color: #ffcc00; box-shadow: 0 0 10px #ffcc00; }
+.dot.active { background-color: var(--accent-green); box-shadow: 0 0 15px var(--accent-green); animation: hardBlink 0.5s infinite; }
+
+/* =========================================
+   4. GLASSMORPHISM PANELS
+   ========================================= */
+.dashboard {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 25px;
+}
+
+.panel {
+    background: var(--bg-panel);
+    backdrop-filter: blur(10px); /* Frosted glass effect */
+    border: 1px solid rgba(0, 240, 255, 0.3);
+    padding: 25px;
+    position: relative;
+    /* Angled corners using clip-path */
+    clip-path: polygon(0 0, 100% 0, 100% calc(100% - 15px), calc(100% - 15px) 100%, 0 100%);
+    transition: all 0.3s ease;
+}
+
+.panel::before {
+    content: "";
+    position: absolute;
+    top: 0; left: 0;
+    width: 4px; height: 100%;
+    background: var(--accent-cyan);
+    box-shadow: var(--glow-cyan);
+}
+
+.panel:hover {
+    background: rgba(0, 240, 255, 0.05);
+    border-color: var(--accent-cyan);
+}
+
+.panel h2 {
+    font-size: 1.1rem;
+    color: var(--accent-cyan);
+    margin-bottom: 25px;
+    display: inline-block;
+    border-bottom: 2px solid var(--accent-cyan);
+    padding-bottom: 5px;
+    text-shadow: 0 0 8px rgba(0, 240, 255, 0.4);
+}
+
+.visualizer-panel, .security-panel {
+    grid-column: 1 / -1;
+}
+
+/* =========================================
+   5. SCI-FI INPUTS & FILE DROP
+   ========================================= */
+input[type="password"] {
+    width: 100%;
+    background: rgba(0, 0, 0, 0.5);
+    border: 1px solid var(--accent-cyan-dim);
+    border-left: 4px solid var(--accent-cyan);
+    color: var(--accent-cyan);
+    padding: 15px;
+    font-family: var(--font-mono);
+    font-size: 1.2rem;
+    outline: none;
+    letter-spacing: 8px;
+    transition: 0.3s;
+}
+
+input[type="password"]:focus {
+    background: rgba(0, 240, 255, 0.1);
+    box-shadow: inset 0 0 10px rgba(0, 240, 255, 0.2);
+}
+
+.file-drop-zone {
+    background: repeating-linear-gradient(
+        45deg,
+        rgba(0, 240, 255, 0.02),
+        rgba(0, 240, 255, 0.02) 10px,
+        transparent 10px,
+        transparent 20px
+    );
+    border: 2px dashed var(--accent-cyan-dim);
+    padding: 50px 20px;
+    text-align: center;
+    cursor: pointer;
+    transition: all 0.3s;
+    margin-bottom: 20px;
+}
+
+.file-drop-zone:hover {
+    background-color: rgba(0, 240, 255, 0.1);
+    border-color: var(--accent-cyan);
+    box-shadow: inset 0 0 20px rgba(0, 240, 255, 0.2);
+}
+
+.file-label { color: var(--text-main); font-weight: bold; cursor: pointer; text-transform: uppercase; letter-spacing: 1px;}
+.file-metadata { display: flex; justify-content: space-between; font-size: 0.9rem; color: var(--accent-cyan); margin-bottom: 20px; }
+
+/* =========================================
+   6. NEXT-GEN BUTTONS
+   ========================================= */
+.toggle-container { display: flex; gap: 15px; }
+
+button {
+    font-family: var(--font-mono);
+    text-transform: uppercase;
+    font-weight: bold;
+    cursor: pointer;
+    position: relative;
+    border: none;
+    letter-spacing: 2px;
+}
+
+.btn-mode {
+    flex: 1;
+    background: rgba(255, 255, 255, 0.05);
+    color: var(--text-muted);
+    padding: 12px;
+    border: 1px solid var(--text-muted);
+    clip-path: polygon(10px 0, 100% 0, 100% calc(100% - 10px), calc(100% - 10px) 100%, 0 100%, 0 10px);
+    transition: 0.3s;
+}
+
+.btn-mode:hover { background: rgba(255, 255, 255, 0.1); }
+
+.btn-mode.active {
+    background: var(--accent-cyan-dim);
+    color: var(--accent-cyan);
+    border: 1px solid var(--accent-cyan);
+    box-shadow: inset 0 0 15px rgba(0, 240, 255, 0.4);
+}
+
+/* Primary Action Buttons (Tx/Rx) */
+.btn-primary, .btn-secondary, .btn-download {
+    display: block;
+    width: 100%;
+    padding: 18px;
+    background: var(--accent-cyan-dim);
+    color: var(--accent-cyan);
+    border: 1px solid var(--accent-cyan);
+    clip-path: polygon(15px 0, 100% 0, 100% calc(100% - 15px), calc(100% - 15px) 100%, 0 100%, 0 15px);
+    overflow: hidden;
+    transition: 0.3s;
+    text-align: center;
+    text-decoration: none;
+}
+
+/* Button hover sweep effect */
+.btn-primary::before, .btn-secondary::before {
+    content: "";
+    position: absolute;
+    top: 0; left: -100%;
+    width: 100%; height: 100%;
+    background: linear-gradient(90deg, transparent, rgba(0, 240, 255, 0.4), transparent);
+    transition: 0.5s;
+}
+
+.btn-primary:hover:not(:disabled)::before, .btn-secondary:hover::before {
+    left: 100%;
+}
+
+.btn-primary:hover:not(:disabled), .btn-secondary:hover, .btn-download:hover {
+    background: var(--accent-cyan);
+    color: #000;
+    box-shadow: var(--glow-cyan);
+}
+
+button:disabled {
+    opacity: 0.3;
+    cursor: not-allowed;
+    background: transparent;
+    border-color: var(--text-muted);
+    color: var(--text-muted);
+}
+
+/* =========================================
+   7. CANVAS VISUALIZER
+   ========================================= */
+.canvas-container {
+    width: 100%;
+    height: 250px;
+    background: #000;
+    border: 1px solid var(--accent-cyan-dim);
+    position: relative;
+    box-shadow: inset 0 0 30px rgba(0, 240, 255, 0.1);
+}
+
+canvas {
+    width: 100%;
+    height: 100%;
+    display: block;
+}
+
+.hidden { display: none !important; }
+
+/* =========================================
+   8. KEYFRAME ANIMATIONS
+   ========================================= */
+@keyframes bootUp {
+    0% { opacity: 0; transform: translateY(20px) scale(0.98); filter: blur(10px); }
+    100% { opacity: 1; transform: translateY(0) scale(1); filter: blur(0); }
+}
+
+@keyframes backgroundDrift {
+    from { background-position: 0 0; }
+    to { background-position: -40px 40px; }
+}
+
+@keyframes hardBlink {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0; }
+}
