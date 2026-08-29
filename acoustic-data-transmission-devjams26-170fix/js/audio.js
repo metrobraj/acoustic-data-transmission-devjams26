@@ -13,44 +13,73 @@ const AudioPipeline = {
             this.audioCtx = new (window.AudioContext || window.webkitAudioContext)();
         }
         if (!this.ggwave) {
-            // Load WebAssembly module
+            // Initialize WebAssembly Factory
             this.ggwave = await ggwave_factory();
-            this.ggwaveInstance = this.ggwave.init({
-                sampleRate: this.audioCtx.sampleRate,
-                soundMarkerThreshold: 4
-            });
-            console.log("[Audio] ggwave WASM Engine initialized.");
+            
+            // EXACT FIX: Pass all required parameters to the C++ bindings
+            const parameters = this.ggwave.getDefaultParameters();
+            parameters.sampleRateIn = this.audioCtx.sampleRate;
+            parameters.sampleRateOut = this.audioCtx.sampleRate;
+            parameters.soundMarkerThreshold = 4;
+            parameters.payloadLength = 0; // 0 = dynamic/variable length in ggwave parameters
+
+            this.ggwaveInstance = this.ggwave.init(parameters);
+            
+            console.log("[Audio] ggwave WASM Engine initialized successfully.");
         }
     },
 
     // ==========================================
     // 1. TRANSMITTER ENGINE (ggwave WASM)
     // ==========================================
-    transmitPayload: async function(payloadBytes) {
+   transmitPayload: async function(payloadBytes) {
         await this.init();
         console.log(`[TX] Encoding ${payloadBytes.length} bytes via ggwave WASM...`);
 
-        // Generate audio waveform with Reed-Solomon Error Correction & CRC
+        // 1. Ensure payload is a clean, standard binary string
+        let payloadString = "";
+        for (let i = 0; i < payloadBytes.length; i++) {
+            payloadString += String.fromCharCode(payloadBytes[i]);
+        }
+
+        // 2. Fetch or fallback Protocol ID as an explicit integer
+        // Protocol 1 = GGWAVE_PROTOCOL_ULTRASOUND_FAST
+        // Protocol 0 = GGWAVE_PROTOCOL_AUDIBLE_FAST (Fallback if ultrasound isn't supported)
+        let protocolId = 1; 
+        if (this.ggwave.ProtocolId && this.ggwave.ProtocolId.GGWAVE_PROTOCOL_ULTRASOUND_FAST !== undefined) {
+            protocolId = this.ggwave.ProtocolId.GGWAVE_PROTOCOL_ULTRASOUND_FAST;
+        } else if (this.ggwave.TxProtocolId && this.ggwave.TxProtocolId.GGWAVE_TX_PROTOCOL_ULTRASOUND_FAST !== undefined) {
+            protocolId = this.ggwave.TxProtocolId.GGWAVE_TX_PROTOCOL_ULTRASOUND_FAST;
+        }
+
+        // 3. Force integer types explicitly using Math.floor or parseInt
+        const instance = this.ggwaveInstance;
+        const volume = 10; // Integer 1-100
+
+        console.log(`[TX] Calling ggwave.encode with Protocol ID: ${protocolId}`);
+
+        // 4. Generate audio waveform
         const waveform = this.ggwave.encode(
-            this.ggwaveInstance, 
-            payloadBytes, 
-            this.ggwave.ProtocolId.GGWAVE_TX_PROTOCOL_ULTRASOUND_FAST,
-            10 // Volume level (1-100)
+            instance, 
+            payloadString, 
+            protocolId, 
+            volume
         );
 
         if (!waveform || waveform.length === 0) {
-            console.error("[TX] Failed to encode waveform.");
+            console.error("[TX] Failed to encode waveform: ggwave returned an empty array.");
             return;
         }
 
-        // Play generated waveform through Web Audio API
+        console.log(`[TX] Playing waveform of ${waveform.length} audio samples...`);
+
+        // 5. Play audio via Web Audio API
         const audioBuffer = this.audioCtx.createBuffer(1, waveform.length, this.audioCtx.sampleRate);
         audioBuffer.getChannelData(0).set(waveform);
 
         const source = this.audioCtx.createBufferSource();
         source.buffer = audioBuffer;
 
-        // Route through Analyser Node for visualizer support
         if (!this.analyser) {
             this.analyser = this.audioCtx.createAnalyser();
             this.analyser.fftSize = 2048;
@@ -60,12 +89,10 @@ const AudioPipeline = {
 
         source.start();
         
-        // Wait until audio finishes playing
         const durationMs = (waveform.length / this.audioCtx.sampleRate) * 1000;
         await this.sleep(durationMs + 100);
         console.log("[TX] Transmission complete.");
     },
-
     // ==========================================
     // 2. RECEIVER ENGINE (ggwave WASM)
     // ==========================================
