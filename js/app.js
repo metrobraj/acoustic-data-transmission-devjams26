@@ -47,6 +47,7 @@ document.addEventListener('DOMContentLoaded', () => {
             
             // UNLOCK AUDIO CONTEXT
             if (typeof AudioPipeline !== 'undefined') AudioPipeline.init();
+            
         });
     }
 
@@ -125,10 +126,18 @@ document.addEventListener('DOMContentLoaded', () => {
                 return;
             }
 
+            // --- VISUALIZER STEP 1: INITIALIZE ---
+            if (typeof Visualizer !== 'undefined') {
+                Visualizer.init('spectrogramCanvas'); 
+            }
+
             // 3. Trigger transmission
             try {
                 btnTransmit.textContent = "TRANSMITTING...";
                 btnTransmit.disabled = true;
+
+                // --- VISUALIZER STEP 2: START DRAWING ---
+                if (typeof Visualizer !== 'undefined') Visualizer.start();
 
                 console.log("Starting transmission of payload:", readyPayload);
                 await AudioPipeline.transmitPayload(readyPayload);
@@ -137,30 +146,66 @@ document.addEventListener('DOMContentLoaded', () => {
             } catch (error) {
                 console.error("Error during transmission:", error);
             } finally {
+                // --- VISUALIZER STEP 3: STOP DRAWING ---
+                if (typeof Visualizer !== 'undefined') Visualizer.stop();
+
                 btnTransmit.textContent = "INITIATE CHIRP";
                 btnTransmit.disabled = false;
             }
 
         });
     }
-    // --- ADD THIS INSIDE YOUR EXISTING DOMContentLoaded BLOCK ---
+    // 6. Receive Button Handler (MFSK Version)
     const btnReceive = document.getElementById('btnReceive');
     if (btnReceive) {
         btnReceive.addEventListener('click', async () => {
             btnReceive.textContent = "LISTENING FOR CHIRPS...";
             btnReceive.disabled = true;
-            
-            // Calls the receiver function we just added to audio.js
-            await AudioPipeline.startReceiver((finalBytes) => {
-                console.log("[RX] Payload successfully assembled:", finalBytes);
-                alert("File received successfully!");
-            });
 
-            // Update UI to active listening state
             const statusDot = document.getElementById('statusDot');
-            if(statusDot) statusDot.className = "dot active";
+            if (statusDot) statusDot.className = "dot active";
+
+            if (typeof Visualizer !== 'undefined') {
+                Visualizer.init('spectrogramCanvas');
+                Visualizer.start();
+            }
+
+            // Call your custom MFSK receiver
+            await AudioPipeline.startReceiver((receivedUint8Array) => {
+                console.log(`[App] MFSK Signal decoded! Received ${receivedUint8Array.length} bytes.`);
+
+                if (typeof Visualizer !== 'undefined') Visualizer.stop();
+
+                // Decompress the payload back to original file bytes
+                const originalFileBytes = DataPipeline.decompressPayload(receivedUint8Array);
+
+                if (originalFileBytes) {
+                    // Wrap raw bytes into a downloadable Blob
+                    const blob = new Blob([originalFileBytes], { type: 'application/octet-stream' });
+                    const blobUrl = URL.createObjectURL(blob);
+
+                    // Update UI download link (matching the HTML provided previously)
+                    const downloadLink = document.getElementById('downloadLink');
+                    const downloadZone = document.getElementById('downloadZone');
+
+                    if (downloadLink && downloadZone) {
+                        downloadLink.href = blobUrl;
+                        downloadLink.download = `recovered_file_${Date.now()}`; 
+                        downloadZone.classList.remove('hidden');
+                    }
+
+                    console.log("[App] File successfully reconstructed and ready for download!");
+                } else {
+                    console.error("[App] Decompression failed.");
+                    alert("File reconstruction failed. Payload data was corrupted.");
+                }
+
+                // Reset receiver button UI state
+                btnReceive.textContent = "ENGAGE RECEIVER";
+                btnReceive.disabled = false;
+                if (statusDot) statusDot.className = "dot";
+            });
         });
     }
-
 });
 
