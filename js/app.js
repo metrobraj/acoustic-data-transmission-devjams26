@@ -1,29 +1,59 @@
 // js/app.js
 
 document.addEventListener('DOMContentLoaded', () => {
+    // UI Elements
     const fileInput = document.getElementById('fileInput');
     const fileName = document.getElementById('fileName');
     const fileSize = document.getElementById('fileSize');
     const btnTransmit = document.getElementById('btnTransmit');
+    
+    // Mode Selection Buttons
+    const btnSelectTx = document.getElementById('btnSelectTx');
+    const btnSelectRx = document.getElementById('btnSelectRx');
+    const txPanel = document.getElementById('txPanel');
+    const rxPanel = document.getElementById('rxPanel');
+    const statusText = document.querySelector('.statustext');
 
-    fileInput.addEventListener('change', (event) => {
-        const file = event.target.files[0];
-        if (!file) return;
+    // Handle Mode Toggles
+    if (btnSelectTx && btnSelectRx) {
+        btnSelectTx.addEventListener('click', () => {
+            txPanel.classList.remove('hidden');
+            rxPanel.classList.add('hidden');
+            statusText.textContent = 'SYSTEM ACTIVE || MODE: TRANSMITTER (TX)';
+        });
 
-        fileName.textContent = file.name;
-        fileSize.textContent = `${(file.size / 1024).toFixed(2)} KB`;
-        btnTransmit.disabled = false;
+        btnSelectRx.addEventListener('click', () => {
+            rxPanel.classList.remove('hidden');
+            txPanel.classList.add('hidden');
+            statusText.textContent = 'SYSTEM ACTIVE || MODE: RECEIVER (RX)';
+        });
+    }
 
-        // Read file contents as ArrayBuffer and test compression
-        const reader = new FileReader();
-        reader.onload = function(e) {
-            const arrayBuffer = e.target.result;
-            const rawBytes = new Uint8Array(arrayBuffer);
-            
-            // Compress using your data.js pipeline
-            const compressed = pako.deflate(rawBytes);
-            console.log(`Original: ${rawBytes.length} bytes | Compressed: ${compressed.length} bytes`);
-        };
-        reader.readAsArrayBuffer(file);
-    });
+    // Handle File Selection & Compression Pipeline Integration
+    if (fileInput) {
+        fileInput.addEventListener('change', (event) => {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            fileName.textContent = file.name;
+            fileSize.textContent = `${(file.size / 1024).toFixed(2)} KB`;
+            btnTransmit.disabled = false;
+
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                const arrayBuffer = e.target.result;
+                const rawBytes = new Uint8Array(arrayBuffer);
+                
+                // Convert binary file content to string format for the data pipeline
+                const decoder = new TextDecoder('iso-8859-1'); // preserves raw byte integrity
+                const textContent = decoder.decode(rawBytes);
+
+                // Pass through your DataPipeline (data.js) instead of calling pako/fflate directly!
+                const processedPayload = DataPipeline.compressPayload(textContent);
+                
+                console.log(`Processed binary payload ready for modulation: ${processedPayload.length} bytes.`);
+            };
+            reader.readAsArrayBuffer(file);
+        });
+    }
 });
