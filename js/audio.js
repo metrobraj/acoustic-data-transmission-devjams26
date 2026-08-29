@@ -7,7 +7,7 @@ const AudioPipeline = {
     FREQ_0: 17500, // Represents a binary '0'
     FREQ_1: 18500, // Represents a binary '1'
     PREAMBLE_FREQ: 19500, // Used to wake up the receiver
-    BAUD_RATE: 50, // Milliseconds per bit (Speed of transmission)
+    BAUD_RATE: 12, // Milliseconds per bit (Speed of transmission)
 
     /**
      * Initializes the Web Audio API Context. 
