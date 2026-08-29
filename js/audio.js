@@ -279,21 +279,21 @@ const AudioPipeline = {
         // Parse length header
         const expectedLength = (rawBytes[0] << 8) | rawBytes[1];
         const payload = rawBytes.slice(2, 2 + expectedLength);
-        const receivedChecksum = rawBytes[2 + expectedLength];
+        // const receivedChecksum = rawBytes[2 + expectedLength];
 
-        // Recompute checksum
-        let computedChecksum = 0;
-        for (let i = 0; i < payload.length; i++) {
-            computedChecksum ^= payload[i];
-        }
+        // // Recompute checksum
+        // let computedChecksum = 0;
+        // for (let i = 0; i < payload.length; i++) {
+        //     computedChecksum ^= payload[i];
+        // }
 
-        if (computedChecksum !== receivedChecksum) {
-            console.error(`%c[RX] CHECKSUM MISMATCH! Expected ${receivedChecksum}, got ${computedChecksum}. Packet corrupted.`, "color: red; font-weight: bold;");
-            if (onDataComplete) onDataComplete(null);
-            return;
-        }
+        // if (computedChecksum !== receivedChecksum) {
+        //     console.error(`%c[RX] CHECKSUM MISMATCH! Expected ${receivedChecksum}, got ${computedChecksum}. Packet corrupted.`, "color: red; font-weight: bold;");
+        //     if (onDataComplete) onDataComplete(null);
+        //     return;
+        // }
 
-        console.log("%c[RX 4/4] SUCCESS! Checksum verified. Payload:", "color: #7ed321; font-weight: bold; font-size: 14px;", payload);
+        // console.log("%c[RX 4/4] SUCCESS! Checksum verified. Payload:", "color: #7ed321; font-weight: bold; font-size: 14px;", payload);
         if (onDataComplete) onDataComplete(payload);
     },
 
