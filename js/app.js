@@ -140,6 +140,27 @@ document.addEventListener('DOMContentLoaded', () => {
                 btnTransmit.textContent = "INITIATE CHIRP";
                 btnTransmit.disabled = false;
             }
+
         });
     }
+    // --- ADD THIS INSIDE YOUR EXISTING DOMContentLoaded BLOCK ---
+    const btnReceive = document.getElementById('btnReceive');
+    if (btnReceive) {
+        btnReceive.addEventListener('click', async () => {
+            btnReceive.textContent = "LISTENING FOR CHIRPS...";
+            btnReceive.disabled = true;
+            
+            // Calls the receiver function we just added to audio.js
+            const success = await AudioPipeline.initReceiver();
+            if (success) {
+                const statusDot = document.getElementById('statusDot');
+                if(statusDot) statusDot.className = "dot active";
+            } else {
+                btnReceive.textContent = "OPEN MIC BUFFER";
+                btnReceive.disabled = false;
+            }
+        });
+    }
+
 });
+
