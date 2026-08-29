@@ -35,7 +35,7 @@ const AudioPipeline = {
     },
 
     // ==========================================
-    // 1. TRANSMITTER ENGINE (Legion i7 Optimized)
+    // 1. TRANSMITTER ENGINE
     // ==========================================
     playParallelTones: function(frequencies, durationMs) {
         if (!this.audioCtx || frequencies.length === 0) return;
@@ -92,6 +92,7 @@ const AudioPipeline = {
                 const activeFreqs = [];
                 const shift = nibbleIdx * 4;
                 const nibble = (byte >> shift) & 0x0F;
+                console.log(`[TX] Transferring nibble: 0x${nibble.toString(16).toUpperCase()} (Binary: ${nibble.toString(2).padStart(4, '0')})`);
 
                 // Map bits to frequency lanes (Lane 0=13k, Lane 1=14k, Lane 2=15k, Lane 3=16k)
                 for (let bit = 0; bit < 4; bit++) {
@@ -113,7 +114,7 @@ const AudioPipeline = {
     },
 
     // ==========================================
-    // 2. RECEIVER ENGINE (MacBook M5 Optimized)
+    // 2. RECEIVER ENGINE 
     // ==========================================
     startReceiver: async function(onDataComplete, targetByteLength = null) {
         if (!this.audioCtx) this.init();
@@ -246,7 +247,7 @@ const AudioPipeline = {
             requestAnimationFrame(pollAudio);
         };
 
-        pollAudio();
+        pollingInterval = setInterval(pollAudio, 25);
     },
 
     finishReception: function(receivedBits, onDataComplete) {
