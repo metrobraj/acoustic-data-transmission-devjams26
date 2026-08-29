@@ -1,0 +1,352 @@
+/* assets/css/style.css - AirChirp Styling */
+
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    font-family: 'Fira Code', monospace;
+    background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+    color: #e2e8f0;
+    min-height: 100vh;
+    padding: 20px;
+}
+
+.app-container {
+    max-width: 1000px;
+    margin: 0 auto;
+}
+
+/* ============================================
+   HEADER
+   ============================================ */
+.cyber-header {
+    background: rgba(15, 23, 42, 0.8);
+    border: 2px solid #0ea5e9;
+    border-radius: 8px;
+    padding: 30px;
+    margin-bottom: 30px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    box-shadow: 0 0 20px rgba(14, 165, 233, 0.2);
+}
+
+.header-titles h1 {
+    font-size: 24px;
+    font-weight: 700;
+    color: #0ea5e9;
+    margin-bottom: 8px;
+    letter-spacing: 2px;
+}
+
+.subtitle {
+    font-size: 12px;
+    color: #64748b;
+    letter-spacing: 1px;
+}
+
+.status-indicator {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.dot {
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    animation: pulse 2s infinite;
+}
+
+.dot.standby {
+    background: #64748b;
+    box-shadow: 0 0 10px rgba(100, 116, 139, 0.5);
+}
+
+.dot.active {
+    background: #eab308;
+    box-shadow: 0 0 15px rgba(234, 179, 8, 0.7);
+}
+
+.dot.success {
+    background: #10b981;
+    box-shadow: 0 0 15px rgba(16, 185, 129, 0.7);
+}
+
+.dot.error {
+    background: #ef4444;
+    box-shadow: 0 0 15px rgba(239, 68, 68, 0.7);
+}
+
+@keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.6; }
+}
+
+/* ============================================
+   PANELS
+   ============================================ */
+.panel {
+    background: rgba(30, 41, 59, 0.8);
+    border: 1px solid rgba(14, 165, 233, 0.3);
+    border-radius: 6px;
+    padding: 25px;
+    margin-bottom: 20px;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+}
+
+.panel h2 {
+    font-size: 14px;
+    color: #0ea5e9;
+    margin-bottom: 20px;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+}
+
+.security-panel input {
+    width: 100%;
+    padding: 12px;
+    background: rgba(0, 0, 0, 0.3);
+    border: 1px solid rgba(14, 165, 233, 0.2);
+    border-radius: 4px;
+    color: #0ea5e9;
+    font-family: 'Fira Code', monospace;
+    font-size: 12px;
+    letter-spacing: 2px;
+}
+
+.security-panel input::placeholder {
+    color: rgba(100, 116, 139, 0.6);
+}
+
+/* ============================================
+   MODE SELECTOR
+   ============================================ */
+.segmented-control {
+    display: flex;
+    position: relative;
+    background: rgba(0, 0, 0, 0.2);
+    border-radius: 6px;
+    padding: 4px;
+    gap: 0;
+}
+
+.glider {
+    position: absolute;
+    height: calc(100% - 8px);
+    width: calc(50% - 4px);
+    background: linear-gradient(135deg, #0ea5e9, #06b6d4);
+    border-radius: 4px;
+    top: 4px;
+    left: 4px;
+    transition: transform 0.3s ease;
+    box-shadow: 0 0 15px rgba(14, 165, 233, 0.3);
+}
+
+.segment-btn {
+    flex: 1;
+    padding: 12px 20px;
+    background: transparent;
+    border: none;
+    color: #64748b;
+    font-family: 'Fira Code', monospace;
+    font-size: 12px;
+    cursor: pointer;
+    font-weight: 700;
+    position: relative;
+    z-index: 1;
+    transition: color 0.3s ease;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+}
+
+.segment-btn.active {
+    color: #0f172a;
+}
+
+/* ============================================
+   WORKSPACE PANELS
+   ============================================ */
+.workspace-panel {
+    min-height: 200px;
+}
+
+.hidden {
+    display: none !important;
+}
+
+/* ============================================
+   FILE DROP ZONE (TX)
+   ============================================ */
+.file-drop-zone {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    min-height: 120px;
+    border: 2px dashed rgba(14, 165, 233, 0.4);
+    border-radius: 6px;
+    padding: 30px;
+    margin-bottom: 20px;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    background: rgba(0, 0, 0, 0.1);
+}
+
+.file-drop-zone:hover {
+    background: rgba(14, 165, 233, 0.05);
+    border-color: rgba(14, 165, 233, 0.6);
+}
+
+.file-drop-zone input[type="file"] {
+    display: none;
+}
+
+.file-label {
+    font-size: 12px;
+    color: #64748b;
+    text-align: center;
+    letter-spacing: 1px;
+}
+
+.file-metadata {
+    display: flex;
+    justify-content: space-between;
+    padding: 15px;
+    background: rgba(0, 0, 0, 0.2);
+    border-radius: 4px;
+    margin-bottom: 20px;
+    font-size: 11px;
+    color: #a1a5ab;
+}
+
+.file-metadata span {
+    flex: 1;
+}
+
+/* ============================================
+   BUTTONS
+   ============================================ */
+.btn-primary, .btn-secondary, .btn-download {
+    width: 100%;
+    padding: 14px;
+    border: none;
+    border-radius: 4px;
+    font-family: 'Fira Code', monospace;
+    font-size: 12px;
+    font-weight: 700;
+    cursor: pointer;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    transition: all 0.3s ease;
+}
+
+.btn-primary {
+    background: linear-gradient(135deg, #0ea5e9, #06b6d4);
+    color: #0f172a;
+    box-shadow: 0 4px 15px rgba(14, 165, 233, 0.3);
+}
+
+.btn-primary:hover:not(:disabled) {
+    box-shadow: 0 6px 20px rgba(14, 165, 233, 0.5);
+    transform: translateY(-2px);
+}
+
+.btn-primary:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.btn-secondary {
+    background: linear-gradient(135deg, #10b981, #059669);
+    color: white;
+    box-shadow: 0 4px 15px rgba(16, 185, 129, 0.3);
+}
+
+.btn-secondary:hover:not(:disabled) {
+    box-shadow: 0 6px 20px rgba(16, 185, 129, 0.5);
+    transform: translateY(-2px);
+}
+
+.btn-secondary:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.btn-download {
+    background: linear-gradient(135deg, #7c3aed, #6d28d9);
+    color: white;
+    display: inline-block;
+    text-align: center;
+    text-decoration: none;
+}
+
+.btn-download:hover {
+    box-shadow: 0 6px 20px rgba(124, 58, 237, 0.5);
+    transform: translateY(-2px);
+}
+
+/* ============================================
+   DOWNLOAD ZONE (RX)
+   ============================================ */
+.download-zone {
+    background: rgba(16, 185, 129, 0.05);
+    border: 1px solid rgba(16, 185, 129, 0.3);
+    border-radius: 6px;
+    padding: 20px;
+    margin-top: 20px;
+    text-align: center;
+}
+
+.download-zone p {
+    color: #10b981;
+    font-size: 13px;
+    font-weight: 700;
+}
+
+/* ============================================
+   SPECTROGRAM CANVAS
+   ============================================ */
+.visualizer-panel {
+    background: rgba(15, 23, 42, 0.95);
+    border: 1px solid rgba(14, 165, 233, 0.3);
+}
+
+.canvas-container {
+    background: rgba(0, 0, 0, 0.3);
+    border-radius: 4px;
+    overflow: hidden;
+}
+
+#spectrogramCanvas {
+    display: block;
+    width: 100%;
+    height: auto;
+}
+
+/* ============================================
+   RESPONSIVE
+   ============================================ */
+@media (max-width: 600px) {
+    .cyber-header {
+        flex-direction: column;
+        gap: 15px;
+        text-align: center;
+    }
+
+    .header-titles h1 {
+        font-size: 18px;
+    }
+
+    .panel {
+        padding: 15px;
+    }
+
+    .segment-btn {
+        font-size: 10px;
+        padding: 10px 15px;
+    }
+}
