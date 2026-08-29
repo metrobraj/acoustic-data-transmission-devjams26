@@ -1,257 +1,217 @@
-// js/audio.js - Unified Transmitter & Receiver Audio Pipeline
+// js/audio.js
 
 const AudioPipeline = {
     audioCtx: null,
     analyser: null,
+    micStream: null,
     isListening: false,
-    
-    // Frequencies mapped for hackathon MVP (staying in the 17.5 - 19.5kHz safe zone)
-    FREQ_0: 17500, // Represents a binary '0'
-    FREQ_1: 18500, // Represents a binary '1'
-    PREAMBLE_FREQ: 19500, // Used to wake up the receiver
-    BAUD_RATE: 12, // Milliseconds per bit (Speed of transmission)
+
+    // Single-Lane FSK Frequency Map (Hz)
+    FREQ_0: 17500,       // Binary 0
+    FREQ_1: 18500,       // Binary 1
+    START_FREQ: 19500,   // Frame Start Marker
+    END_FREQ: 19800,     // Frame End Marker
+
+    BAUD_RATE: 15,       // Symbol duration per bit (ms)
 
     /**
-     * Initializes the Web Audio API Context. 
+     * Initializes AudioContext on user gesture.
      */
     init: function() {
         if (!this.audioCtx) {
             this.audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-            console.log("AudioContext initialized with sample rate:", this.audioCtx.sampleRate);
+            console.log("[Audio] AudioContext initialized at:", this.audioCtx.sampleRate, "Hz");
         }
     },
 
-    /**
-     * Plays a specific frequency for a set duration.
-     */
-    playTone: function(frequency, durationMs) {
-        if (!this.audioCtx) this.init();
+    // ==========================================
+    // 1. TRANSMITTER ENGINE (TX - Single-Tone FSK)
+    // ==========================================
 
+    playTone: function(frequency, durationMs) {
+        if (!this.audioCtx) return;
+
+        const now = this.audioCtx.currentTime;
+        const durationSec = durationMs / 1000;
+        
         const oscillator = this.audioCtx.createOscillator();
         const gainNode = this.audioCtx.createGain();
 
         oscillator.type = 'sine';
         oscillator.frequency.value = frequency;
 
-        gainNode.gain.setValueAtTime(0, this.audioCtx.currentTime);
-        gainNode.gain.linearRampToValueAtTime(1, this.audioCtx.currentTime + 0.01);
-        gainNode.gain.setValueAtTime(1, this.audioCtx.currentTime + (durationMs / 1000) - 0.01);
-        gainNode.gain.linearRampToValueAtTime(0, this.audioCtx.currentTime + (durationMs / 1000));
+        // Smooth gain envelope to prevent clicking
+        gainNode.gain.setValueAtTime(0, now);
+        gainNode.gain.linearRampToValueAtTime(0.8, now + 0.002);
+        gainNode.gain.setValueAtTime(0.8, now + durationSec - 0.002);
+        gainNode.gain.linearRampToValueAtTime(0, now + durationSec);
 
         oscillator.connect(gainNode);
         gainNode.connect(this.audioCtx.destination);
 
-        oscillator.start();
-        oscillator.stop(this.audioCtx.currentTime + (durationMs / 1000));
+        oscillator.start(now);
+        oscillator.stop(now + durationSec);
     },
 
-    /**
-     * Converts a Uint8Array into a sequence of audio tones (Modulation).
-     */
     transmitPayload: async function(payloadBytes) {
         if (!this.audioCtx) this.init();
-        
-        console.log(`Starting acoustic transmission of ${payloadBytes.length} bytes...`);
 
-        this.playTone(this.PREAMBLE_FREQ, 200);
-        await this.sleep(200);
+        console.log(`[TX] Initiating single-lane FSK transmission: ${payloadBytes.length} bytes...`);
 
+        // 1. Transmit START Marker (19.5kHz)
+        this.playTone(this.START_FREQ, 150);
+        await this.sleep(170);
+
+        // 2. Transmit Payload Bit-by-Bit
         for (let i = 0; i < payloadBytes.length; i++) {
-            let byte = payloadBytes[i];
+            const byte = payloadBytes[i];
             
             for (let b = 7; b >= 0; b--) {
                 const bit = (byte >> b) & 1;
-                const targetFreq = bit === 1 ? this.FREQ_1 : this.FREQ_0;
+                const targetFreq = (bit === 1) ? this.FREQ_1 : this.FREQ_0;
                 
                 this.playTone(targetFreq, this.BAUD_RATE);
                 await this.sleep(this.BAUD_RATE);
             }
         }
-        console.log("Transmission complete.");
+
+        // 3. Transmit END Marker (19.8kHz)
+        await this.sleep(50);
+        this.playTone(this.END_FREQ, 150);
+        console.log("[TX] Transmission complete. END marker emitted.");
     },
 
-    /**
-     * Initialize Audio Context and Request Microphone Access for Receiver
-     */
-    initReceiver: async function() {
-        try {
-            if (!this.audioCtx) this.init();
-            
-            const stream = await navigator.mediaDevices.getUserMedia({ 
-                audio: { 
-                    echoCancellation: false, 
-                    noiseSuppression: false, 
-                    autoGainControl: false 
-                } 
-            });
+    // ==========================================
+    // 2. RECEIVER ENGINE (RX - Single-Lane Demodulation)
+    // ==========================================
 
-            const source = this.audioCtx.createMediaStreamSource(stream);
+    startReceiver: async function(onDataComplete) {
+        if (!this.audioCtx) this.init();
+        if (this.isListening) return;
+
+        try {
+            this.micStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+            const source = this.audioCtx.createMediaStreamSource(this.micStream);
+
             this.analyser = this.audioCtx.createAnalyser();
-            this.analyser.fftSize = 2048;
-            
+            this.analyser.fftSize = 2048; // Resolves ~23.4Hz per bin
             source.connect(this.analyser);
+
             this.isListening = true;
-            
-            console.log("MIC BUFFER OPEN: Listening for near-ultrasonic chirps (17kHz - 20kHz)...");
-            this.startListeningLoop();
-            
-            return true;
+            console.log("[RX] Mic buffer online. Listening for FSK chirps...");
+
+            this.listenLoop(onDataComplete);
         } catch (err) {
-            console.error("Microphone access denied or unsupported:", err);
-            alert("Microphone permission is required to receive acoustic data.");
-            return false;
+            console.error("[RX] Failed to access microphone:", err);
         }
     },
 
     /**
-     * Continuous FFT Frequency Polling Loop
+     * Scans a target frequency band (+/- toleranceHz) and returns peak magnitude.
      */
-    startListeningLoop: function() {
+    getMagnitudeAtFreqRange: function(dataArray, targetFreq, toleranceHz = 100) {
+        const sampleRate = this.audioCtx.sampleRate;
+        const minFreq = targetFreq - toleranceHz;
+        const maxFreq = targetFreq + toleranceHz;
+
+        const startBin = Math.floor((minFreq * this.analyser.fftSize) / sampleRate);
+        const endBin = Math.ceil((maxFreq * this.analyser.fftSize) / sampleRate);
+
+        let maxMagnitude = 0;
+        for (let i = startBin; i <= endBin; i++) {
+            if (dataArray[i] > maxMagnitude) {
+                maxMagnitude = dataArray[i];
+            }
+        }
+        return maxMagnitude;
+    },
+
+    listenLoop: function(onDataComplete) {
         const bufferLength = this.analyser.frequencyBinCount;
         const dataArray = new Uint8Array(bufferLength);
-        
-        const evaluateSpectrum = () => {
+
+        let receivingFrame = false;
+        let receivedBits = [];
+        let lastBitTime = 0;
+
+        const pollAudio = () => {
             if (!this.isListening) return;
 
             this.analyser.getByteFrequencyData(dataArray);
 
-            const nyquist = this.audioCtx.sampleRate / 2;
-            const targetMinBin = Math.floor(17000 * bufferLength / nyquist);
-            const targetMaxBin = Math.floor(20000 * bufferLength / nyquist);
+            // Calculate dynamic noise floor threshold
+            const averageNoise = dataArray.reduce((a, b) => a + b, 0) / dataArray.length;
+            const dynamicThreshold = Math.max(90, averageNoise * 1.6); // Floor of 90, or 60% above background noise
 
-            let peakVolume = 0;
-            let peakBin = -1;
+            // Read markers with +/- 120Hz tolerance
+            const startMag = this.getMagnitudeAtFreqRange(dataArray, this.START_FREQ, 120);
+            const endMag   = this.getMagnitudeAtFreqRange(dataArray, this.END_FREQ, 120);
 
-            for (let i = targetMinBin; i <= targetMaxBin; i++) {
-                if (dataArray[i] > peakVolume) {
-                    peakVolume = dataArray[i];
-                    peakBin = i;
+            // 1. DETECT START MARKER
+            if (!receivingFrame && startMag > dynamicThreshold) {
+                receivingFrame = true;
+                receivedBits = [];
+                console.log("%c[RX] DETECTED START FREQUENCY (19.5kHz)!", "color: #7ed321; font-weight: bold;");
+            }
+
+            // 2. PARSE BITS SEQUENTIALLY
+            if (receivingFrame) {
+                const now = Date.now();
+
+                if (now - lastBitTime >= this.BAUD_RATE) {
+                    const mag0 = this.getMagnitudeAtFreqRange(dataArray, this.FREQ_0, 80);
+                    const mag1 = this.getMagnitudeAtFreqRange(dataArray, this.FREQ_1, 80);
+
+                    // Determine if a bit frequency peak is present above threshold
+                    if (mag0 > dynamicThreshold || mag1 > dynamicThreshold) {
+                        const bit = (mag1 > mag0) ? 1 : 0;
+                        receivedBits.push(bit);
+                        lastBitTime = now;
+                    }
+                }
+
+                // 3. DETECT END MARKER
+                if (endMag > dynamicThreshold && receivedBits.length > 0) {
+                    receivingFrame = false;
+                    console.log("%c[RX] DETECTED END FREQUENCY (19.8kHz)! Assembling bytes...", "color: #0ea5e9; font-weight: bold;");
+
+                    const finalBytes = this.reconstructBytesFromBits(receivedBits);
+                    this.stopReceiver();
+
+                    if (onDataComplete) onDataComplete(finalBytes);
+                    return;
                 }
             }
 
-            if (peakVolume > 180) {
-                const detectedFrequency = (peakBin * nyquist) / bufferLength;
-                console.log(`Chirp detected ~${detectedFrequency.toFixed(1)} Hz | Amplitude: ${peakVolume}`);
-            }
-
-            requestAnimationFrame(evaluateSpectrum);
+            requestAnimationFrame(pollAudio);
         };
 
-        evaluateSpectrum();
+        pollAudio();
+    },
+
+    reconstructBytesFromBits: function(bits) {
+        const bytes = [];
+        for (let i = 0; i < bits.length; i += 8) {
+            if (i + 8 <= bits.length) {
+                let byte = 0;
+                for (let b = 0; b < 8; b++) {
+                    byte = (byte << 1) | bits[i + b];
+                }
+                bytes.push(byte);
+            }
+        }
+        return new Uint8Array(bytes);
+    },
+
+    stopReceiver: function() {
+        this.isListening = false;
+        if (this.micStream) {
+            this.micStream.getTracks().forEach(track => track.stop());
+        }
+        console.log("[RX] Receiver stopped.");
     },
 
     sleep: function(ms) {
         return new Promise(resolve => setTimeout(resolve, ms));
     }
 };
-
-
-// for multilanes, option - 1
-// // js/audio.js
-
-// const AudioPipeline = {
-//     audioCtx: null,
-    
-//     // 4 Parallel Frequency Lanes (spaced 500Hz apart to prevent hardware crosstalk)
-//     LANES: [17500, 18000, 18500, 19000], 
-//     PREAMBLE_FREQ: 19500, // Wake-up tone for receiver sync
-    
-//     // Speed optimization: 15ms per 4-bit nibble
-//     BAUD_RATE: 15, 
-
-//     /**
-//      * Initializes the Web Audio API Context.
-//      */
-//     init: function() {
-//         if (!this.audioCtx) {
-//             this.audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-//             console.log("AudioContext initialized at:", this.audioCtx.sampleRate, "Hz");
-//         }
-//     },
-
-//     /**
-//      * Transmits multiple frequencies simultaneously (Multi-Carrier Burst).
-//      * @param {Array<number>} activeFrequencies - Array of frequencies to play together.
-//      * @param {number} durationMs - How long the burst plays.
-//      */
-//     playMultiCarrierBurst: function(activeFrequencies, durationMs) {
-//         if (!this.audioCtx || activeFrequencies.length === 0) return;
-
-//         const now = this.audioCtx.currentTime;
-//         const durationSec = durationMs / 1000;
-        
-//         // Scale gain down per active lane to avoid speaker clipping/distortion
-//         const masterGain = this.audioCtx.createGain();
-//         const volumePerLane = 0.8 / activeFrequencies.length;
-        
-//         masterGain.gain.setValueAtTime(0, now);
-//         masterGain.gain.linearRampToValueAtTime(volumePerLane, now + 0.002);
-//         masterGain.gain.setValueAtTime(volumePerLane, now + durationSec - 0.002);
-//         masterGain.gain.linearRampToValueAtTime(0, now + durationSec);
-//         masterGain.connect(this.audioCtx.destination);
-
-//         // Spawn parallel OscillatorNodes for active lanes
-//         activeFrequencies.forEach(freq => {
-//             const osc = this.audioCtx.createOscillator();
-//             osc.type = 'sine';
-//             osc.frequency.value = freq;
-//             osc.connect(masterGain);
-//             osc.start(now);
-//             osc.stop(now + durationSec);
-//         });
-//     },
-
-//     /**
-//      * Multi-Carrier Modulation: Converts Uint8Array into parallel audio bursts.
-//      * @param {Uint8Array} payloadBytes 
-//      */
-//     transmitPayload: async function(payloadBytes) {
-//         if (!this.audioCtx) this.init();
-        
-//         console.log(`[Multi-Carrier TX] Starting 4-lane transmission of ${payloadBytes.length} bytes...`);
-
-//         // 1. Play Synchronized Preamble Tone (19.5kHz) to wake up receiver
-//         this.playMultiCarrierBurst([this.PREAMBLE_FREQ], 150);
-//         await this.sleep(170);
-
-//         // 2. Loop through every byte (Split into high nibble and low nibble)
-//         for (let i = 0; i < payloadBytes.length; i++) {
-//             const byte = payloadBytes[i];
-            
-//             // High Nibble (Bits 7..4)
-//             const highNibble = (byte >> 4) & 0x0F;
-//             await this.transmitNibble(highNibble);
-
-//             // Low Nibble (Bits 3..0)
-//             const lowNibble = byte & 0x0F;
-//             await this.transmitNibble(lowNibble);
-//         }
-
-//         console.log("[Multi-Carrier TX] Transmission complete.");
-//     },
-
-//     /**
-//      * Helper to map a 4-bit nibble across the 4 frequency lanes simultaneously.
-//      */
-//     transmitNibble: async function(nibble) {
-//         const activeFreqs = [];
-
-//         // Check each bit of the nibble; if 1, activate that frequency lane
-//         for (let bitIndex = 0; bitIndex < 4; bitIndex++) {
-//             if ((nibble >> bitIndex) & 1) {
-//                 activeFreqs.push(this.LANES[bitIndex]);
-//             }
-//         }
-
-//         // Play active lanes together in parallel
-//         if (activeFreqs.length > 0) {
-//             this.playMultiCarrierBurst(activeFreqs, this.BAUD_RATE);
-//         }
-        
-//         await this.sleep(this.BAUD_RATE);
-//     },
-
-//     sleep: function(ms) {
-//         return new Promise(resolve => setTimeout(resolve, ms));
-//     }
-// };
