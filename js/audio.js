@@ -72,8 +72,8 @@ const AudioPipeline = {
         await this.sleep(400); // Wait for auditorium echo to clear
 
         // 2. PILOT SYNC (Aligns receiver clock)
-        this.playParallelTones([this.SYNC_FREQ], 50);
-        await this.sleep(50 + this.GUARD_GAP);
+        this.playParallelTones([this.SYNC_FREQ], 80);
+        await this.sleep(80 +   50 + this.GUARD_GAP);
 
         // 3. PAYLOAD DATA (4 bits per symbol)
         for (let i = 0; i < payloadBytes.length; i++) {
@@ -183,7 +183,7 @@ const AudioPipeline = {
                 if (syncMag > this.THRESHOLD) {
                     state = 'RECORDING';
                     // Set clock to sample precisely in the middle of the upcoming data pulses
-                    lastBitTime = Date.now() + (this.BAUD_RATE / 2); 
+                    lastBitTime = Date.now() + (this.BAUD_RATE + this.GUARD_GAP); 
                     console.log("%c[RX 3/4] Clock Synced! Recording bits...", "color: #3b82f6; font-weight: bold;");
                 }
             }
