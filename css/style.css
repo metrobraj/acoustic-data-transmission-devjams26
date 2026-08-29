@@ -1,21 +1,20 @@
 /* =========================================
-   1. CSS VARIABLES & ADVANCED THEME
+   1. CSS VARIABLES: ETHEREAL THEME
    ========================================= */
 :root {
-    --bg-main: #050608;
-    --bg-panel: rgba(10, 14, 23, 0.7);
-    --accent-cyan: #77d779;
-    --accent-cyan-dim: rgba(0, 240, 255, 0.2);
-    --accent-red: #ff003c;
-    --accent-green: #39ff14;
-    --text-main: #e0e6ed;
-    --text-muted: #4a5568;
+    --glass-bg: rgba(255, 255, 255, 0.03);
+    --glass-border: rgba(255, 255, 255, 0.15);
+    --glass-highlight: rgba(255, 255, 255, 0.3);
+    --text-primary: #ffffff;
+    --text-muted: rgba(255, 255, 255, 0.6);
+    --accent-glow: #7ee8fa;
+    --accent-purple: #80ff72;
+    --font-main: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
     --font-mono: 'Fira Code', monospace;
-    --glow-cyan: 0 0 15px rgba(0, 240, 255, 0.6), 0 0 30px rgba(0, 240, 255, 0.2);
 }
 
 /* =========================================
-   2. GLOBAL RESET & CRT OVERLAY
+   2. GLOBAL RESET & FLUID BACKGROUND
    ========================================= */
 * {
     box-sizing: border-box;
@@ -24,135 +23,117 @@
 }
 
 body {
-    background-color: var(--bg-main);
-    color: var(--text-main);
-    font-family: var(--font-mono);
+    background-color: #0b0f19;
+    color: var(--text-primary);
+    font-family: var(--font-main);
     overflow-x: hidden;
-    position: relative;
     min-height: 100vh;
+    display: flex;
+    justify-content: center;
+    position: relative;
 }
 
-/* Animated Grid Background */
-body::before {
-    content: "";
-    position: absolute;
-    top: 0; left: 0; width: 100%; height: 100%;
-    background-image: 
-        linear-gradient(rgba(0, 240, 255, 0.05) 1px, transparent 1px),
-        linear-gradient(90deg, rgba(0, 240, 255, 0.05) 1px, transparent 1px);
-    background-size: 40px 40px;
-    z-index: -2;
-    animation: backgroundDrift 20s linear infinite;
-}
-
-/* CRT Scanline Effect */
-body::after {
+/* Ethereal Moving Gradient Orbs */
+body::before, body::after {
     content: "";
     position: fixed;
-    top: 0; left: 0; width: 100%; height: 100vh;
-    background: linear-gradient(
-        to bottom,
-        rgba(255,255,255,0),
-        rgba(255,255,255,0) 50%,
-        rgba(0,0,0,0.05) 50%,
-        rgba(0,0,0,0.05)
-    );
-    background-size: 100% 4px;
-    z-index: 999;
-    pointer-events: none; /* Allows clicking through the scanlines */
+    border-radius: 50%;
+    filter: blur(120px);
+    z-index: -1;
+    animation: float 20s infinite alternate ease-in-out;
+}
+
+body::before {
+    width: 600px; height: 600px;
+    background: radial-gradient(circle, rgba(126,232,250,0.4) 0%, rgba(0,0,0,0) 70%);
+    top: -100px; left: -100px;
+}
+
+body::after {
+    width: 500px; height: 500px;
+    background: radial-gradient(circle, rgba(138,43,226,0.3) 0%, rgba(0,0,0,0) 70%);
+    bottom: -100px; right: -50px;
+    animation-delay: -10s;
 }
 
 .app-container {
-    max-width: 1200px;
-    margin: 0 auto;
-    padding: 30px 20px;
-    animation: bootUp 1.2s cubic-bezier(0.1, 0.8, 0.3, 1) forwards;
+    width: 100%;
+    max-width: 1100px;
+    padding: 40px 20px;
+    animation: fadeUp 1s cubic-bezier(0.2, 0.8, 0.2, 1) forwards;
 }
 
 /* =========================================
-   3. HEADER & GLITCH TEXT
+   3. HEADER TYPOGRAPHY
    ========================================= */
 .cyber-header {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    border-bottom: 2px solid var(--accent-cyan);
-    padding-bottom: 15px;
-    margin-bottom: 30px;
-    position: relative;
+    margin-bottom: 40px;
+    padding: 20px 30px;
+    border-radius: 24px;
+    background: var(--glass-bg);
+    backdrop-filter: blur(30px) saturate(150%);
+    -webkit-backdrop-filter: blur(30px) saturate(150%);
+    border: 1px solid var(--glass-border);
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2), inset 0 1px 0 var(--glass-highlight);
 }
 
 .cyber-header h1 {
-    font-size: 2rem;
-    color: var(--accent-cyan);
-    text-shadow: var(--glow-cyan);
-    letter-spacing: 4px;
-    position: relative;
+    font-size: 1.5rem;
+    font-weight: 500;
+    letter-spacing: 1px;
 }
 
-/* Status Indicator with hardware blink */
+/* Apple-style Status Pill */
 .status-indicator {
     display: flex;
     align-items: center;
-    gap: 12px;
-    background: rgba(57, 255, 20, 0.1);
+    gap: 10px;
+    background: rgba(0, 0, 0, 0.2);
     padding: 8px 16px;
-    border: 1px solid var(--accent-green);
-    border-radius: 2px;
-    font-weight: bold;
-    color: var(--accent-green);
+    border-radius: 30px;
+    font-size: 0.85rem;
+    border: 1px solid rgba(255, 255, 255, 0.05);
 }
 
-.dot {
-    width: 10px;
-    height: 10px;
-    border-radius: 50%;
-}
-.dot.standby { background-color: #ffcc00; box-shadow: 0 0 10px #ffcc00; }
-.dot.active { background-color: var(--accent-green); box-shadow: 0 0 15px var(--accent-green); animation: hardBlink 0.5s infinite; }
+.dot { width: 8px; height: 8px; border-radius: 50%; }
+.dot.standby { background-color: #f5a623; box-shadow: 0 0 10px #f5a623; }
+.dot.active { background-color: #7ed321; box-shadow: 0 0 10px #7ed321; }
 
 /* =========================================
-   4. GLASSMORPHISM PANELS
+   4. APPLE-INSPIRED GLASS PANELS
    ========================================= */
 .dashboard {
     display: grid;
     grid-template-columns: 1fr 1fr;
-    gap: 25px;
+    gap: 30px;
 }
 
 .panel {
-    background: var(--bg-panel);
-    backdrop-filter: blur(10px); /* Frosted glass effect */
-    border: 1px solid rgba(0, 240, 255, 0.3);
-    padding: 25px;
-    position: relative;
-    /* Angled corners using clip-path */
-    clip-path: polygon(0 0, 100% 0, 100% calc(100% - 15px), calc(100% - 15px) 100%, 0 100%);
-    transition: all 0.3s ease;
-}
-
-.panel::before {
-    content: "";
-    position: absolute;
-    top: 0; left: 0;
-    width: 4px; height: 100%;
-    background: var(--accent-cyan);
-    box-shadow: var(--glow-cyan);
+    background: var(--glass-bg);
+    backdrop-filter: blur(40px) saturate(150%);
+    -webkit-backdrop-filter: blur(40px) saturate(150%);
+    border: 1px solid var(--glass-border);
+    border-radius: 28px;
+    padding: 30px;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.15), inset 0 1px 0 var(--glass-highlight);
+    transition: transform 0.4s cubic-bezier(0.2, 0.8, 0.2, 1), box-shadow 0.4s ease;
 }
 
 .panel:hover {
-    background: rgba(0, 240, 255, 0.05);
-    border-color: var(--accent-cyan);
+    transform: translateY(-2px);
+    box-shadow: 0 15px 40px rgba(0, 0, 0, 0.25), inset 0 1px 0 var(--glass-highlight);
 }
 
 .panel h2 {
-    font-size: 1.1rem;
-    color: var(--accent-cyan);
+    font-size: 0.9rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 2px;
+    color: var(--text-muted);
     margin-bottom: 25px;
-    display: inline-block;
-    border-bottom: 2px solid var(--accent-cyan);
-    padding-bottom: 5px;
-    text-shadow: 0 0 8px rgba(0, 240, 255, 0.4);
 }
 
 .visualizer-panel, .security-panel {
@@ -160,127 +141,125 @@ body::after {
 }
 
 /* =========================================
-   5. SCI-FI INPUTS & FILE DROP
+   5. INPUTS & FROSTED DROP ZONE
    ========================================= */
 input[type="password"] {
     width: 100%;
-    background: rgba(0, 0, 0, 0.5);
-    border: 1px solid var(--accent-cyan-dim);
-    border-left: 4px solid var(--accent-cyan);
-    color: var(--accent-cyan);
-    padding: 15px;
+    background: rgba(0, 0, 0, 0.15);
+    border: 1px solid var(--glass-border);
+    border-radius: 16px;
+    color: var(--text-primary);
+    padding: 18px 20px;
     font-family: var(--font-mono);
     font-size: 1.2rem;
     outline: none;
-    letter-spacing: 8px;
+    letter-spacing: 4px;
     transition: 0.3s;
+    box-shadow: inset 0 2px 5px rgba(0,0,0,0.2);
 }
 
 input[type="password"]:focus {
-    background: rgba(0, 240, 255, 0.1);
-    box-shadow: inset 0 0 10px rgba(0, 240, 255, 0.2);
+    border-color: rgba(255, 255, 255, 0.4);
+    background: rgba(0, 0, 0, 0.25);
+    box-shadow: 0 0 15px rgba(126, 232, 250, 0.2), inset 0 2px 5px rgba(0,0,0,0.2);
 }
 
+.file-input { display: none !important; }
+
 .file-drop-zone {
-    background: repeating-linear-gradient(
-        45deg,
-        rgba(0, 240, 255, 0.02),
-        rgba(0, 240, 255, 0.02) 10px,
-        transparent 10px,
-        transparent 20px
-    );
-    border: 2px dashed var(--accent-cyan-dim);
-    padding: 50px 20px;
-    text-align: center;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 140px;
+    background: rgba(255, 255, 255, 0.02);
+    border: 2px dashed rgba(255, 255, 255, 0.2);
+    border-radius: 20px;
     cursor: pointer;
-    transition: all 0.3s;
+    transition: all 0.3s ease;
     margin-bottom: 20px;
 }
 
 .file-drop-zone:hover {
-    background-color: rgba(0, 240, 255, 0.1);
-    border-color: var(--accent-cyan);
-    box-shadow: inset 0 0 20px rgba(0, 240, 255, 0.2);
+    background: rgba(255, 255, 255, 0.06);
+    border-color: rgba(255, 255, 255, 0.5);
 }
 
-.file-label { color: var(--text-main); font-weight: bold; cursor: pointer; text-transform: uppercase; letter-spacing: 1px;}
-.file-metadata { display: flex; justify-content: space-between; font-size: 0.9rem; color: var(--accent-cyan); margin-bottom: 20px; }
+.file-label {
+    color: var(--text-primary);
+    font-size: 1rem;
+    font-weight: 500;
+    pointer-events: none;
+}
+
+.file-metadata {
+    display: flex;
+    justify-content: space-between;
+    font-size: 0.9rem;
+    color: var(--text-muted);
+    margin-bottom: 25px;
+    padding: 0 10px;
+}
 
 /* =========================================
-   6. NEXT-GEN BUTTONS
+   6. LUXURY GLASS BUTTONS
    ========================================= */
-.toggle-container { display: flex; gap: 15px; }
+.toggle-container {
+    display: flex;
+    background: rgba(0, 0, 0, 0.2);
+    padding: 6px;
+    border-radius: 20px;
+    border: 1px solid var(--glass-border);
+}
 
 button {
-    font-family: var(--font-mono);
-    text-transform: uppercase;
-    font-weight: bold;
+    font-family: var(--font-main);
+    font-size: 0.95rem;
+    font-weight: 500;
+    letter-spacing: 0.5px;
     cursor: pointer;
-    position: relative;
     border: none;
-    letter-spacing: 2px;
+    transition: all 0.4s cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 
+/* Segmented Control (Apple Style Toggles) */
 .btn-mode {
     flex: 1;
-    background: rgba(255, 255, 255, 0.05);
+    background: transparent;
     color: var(--text-muted);
-    padding: 12px;
-    border: 1px solid var(--text-muted);
-    clip-path: polygon(10px 0, 100% 0, 100% calc(100% - 10px), calc(100% - 10px) 100%, 0 100%, 0 10px);
-    transition: 0.3s;
+    padding: 14px;
+    border-radius: 14px;
 }
-
-.btn-mode:hover { background: rgba(255, 255, 255, 0.1); }
 
 .btn-mode.active {
-    background: var(--accent-cyan-dim);
-    color: var(--accent-cyan);
-    border: 1px solid var(--accent-cyan);
-    box-shadow: inset 0 0 15px rgba(0, 240, 255, 0.4);
+    background: rgba(255, 255, 255, 0.1);
+    color: var(--text-primary);
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.2);
 }
 
-/* Primary Action Buttons (Tx/Rx) */
+/* Primary Action Buttons */
 .btn-primary, .btn-secondary, .btn-download {
     display: block;
     width: 100%;
     padding: 18px;
-    background: var(--accent-cyan-dim);
-    color: var(--accent-cyan);
-    border: 1px solid var(--accent-cyan);
-    clip-path: polygon(15px 0, 100% 0, 100% calc(100% - 15px), calc(100% - 15px) 100%, 0 100%, 0 15px);
-    overflow: hidden;
-    transition: 0.3s;
+    background: linear-gradient(135deg, rgba(255, 255, 255, 0.1), rgba(255, 255, 255, 0.03));
+    color: var(--text-primary);
+    border: 1px solid var(--glass-border);
+    border-radius: 18px;
     text-align: center;
     text-decoration: none;
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1), inset 0 1px 0 var(--glass-highlight);
 }
 
-/* Button hover sweep effect */
-.btn-primary::before, .btn-secondary::before {
-    content: "";
-    position: absolute;
-    top: 0; left: -100%;
-    width: 100%; height: 100%;
-    background: linear-gradient(90deg, transparent, rgba(0, 240, 255, 0.4), transparent);
-    transition: 0.5s;
-}
-
-.btn-primary:hover:not(:disabled)::before, .btn-secondary:hover::before {
-    left: 100%;
-}
-
-.btn-primary:hover:not(:disabled), .btn-secondary:hover, .btn-download:hover {
-    background: var(--accent-cyan);
-    color: #000;
-    box-shadow: var(--glow-cyan);
+.btn-primary:hover:not(:disabled), .btn-secondary:hover {
+    background: linear-gradient(135deg, rgba(255, 255, 255, 0.2), rgba(255, 255, 255, 0.05));
+    transform: scale(1.02);
+    box-shadow: 0 8px 25px rgba(0, 0, 0, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.4);
 }
 
 button:disabled {
-    opacity: 0.3;
+    opacity: 0.4;
     cursor: not-allowed;
-    background: transparent;
-    border-color: var(--text-muted);
-    color: var(--text-muted);
+    transform: none !important;
 }
 
 /* =========================================
@@ -288,11 +267,11 @@ button:disabled {
    ========================================= */
 .canvas-container {
     width: 100%;
-    height: 250px;
-    background: #000;
-    border: 1px solid var(--accent-cyan-dim);
-    position: relative;
-    box-shadow: inset 0 0 30px rgba(0, 240, 255, 0.1);
+    height: 220px;
+    background: rgba(0, 0, 0, 0.2);
+    border-radius: 20px;
+    overflow: hidden;
+    box-shadow: inset 0 4px 15px rgba(0, 0, 0, 0.3);
 }
 
 canvas {
@@ -304,19 +283,14 @@ canvas {
 .hidden { display: none !important; }
 
 /* =========================================
-   8. KEYFRAME ANIMATIONS
+   8. ANIMATIONS
    ========================================= */
-@keyframes bootUp {
-    0% { opacity: 0; transform: translateY(20px) scale(0.98); filter: blur(10px); }
-    100% { opacity: 1; transform: translateY(0) scale(1); filter: blur(0); }
+@keyframes float {
+    0% { transform: translate(0, 0) scale(1); }
+    100% { transform: translate(30px, -50px) scale(1.1); }
 }
 
-@keyframes backgroundDrift {
-    from { background-position: 0 0; }
-    to { background-position: -40px 40px; }
-}
-
-@keyframes hardBlink {
-    0%, 100% { opacity: 1; }
-    50% { opacity: 0; }
+@keyframes fadeUp {
+    0% { opacity: 0; transform: translateY(20px); }
+    100% { opacity: 1; transform: translateY(0); }
 }
