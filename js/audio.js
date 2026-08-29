@@ -1,4 +1,4 @@
-// js/audio.js
+// js/audio.js - Auditorium-Grade OFDM Acoustic Modem
 
 const AudioPipeline = {
     audioCtx: null,
@@ -6,207 +6,216 @@ const AudioPipeline = {
     micStream: null,
     isListening: false,
 
-    // Single-Lane FSK Frequency Map (Hz)
-    FREQ_0: 17500,       // Binary 0
-    FREQ_1: 18500,       // Binary 1
-    START_FREQ: 19500,   // Frame Start Marker
-    END_FREQ: 19800,     // Frame End Marker
+    // ----------------------------------------------------
+    // WIDE-BAND FREQUENCY ALLOCATION (Zero Crosstalk)
+    // ----------------------------------------------------
+    LANE_FREQS: [
+        13000, // Lane 0 (Bit 0)
+        14000, // Lane 1 (Bit 1)
+        15000, // Lane 2 (Bit 2)
+        16000  // Lane 3 (Bit 3)
+    ],
+    
+    START_FREQ: 17000, // Wake up receiver
+    SYNC_FREQ:  16500, // Precise clock-sync trigger
+    END_FREQ:   17500, // Transmission complete
 
-    BAUD_RATE: 30,       // Symbol duration per bit (ms)
+    // ----------------------------------------------------
+    // TIMING CONSTRAINTS (Tuned for Large Room Acoustics)
+    // ----------------------------------------------------
+    BAUD_RATE: 45,     // Duration of each tone pulse (ms)
+    GUARD_GAP: 25,     // Dead-air between pulses to stop echo overlap (ms)
+    THRESHOLD: 45,     // Amplitude required to register a 1 (out of 255)
 
-    /**
-     * Initializes AudioContext on user gesture.
-     */
     init: function() {
         if (!this.audioCtx) {
             this.audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-            console.log("[Audio] AudioContext initialized at:", this.audioCtx.sampleRate, "Hz");
+            console.log(`[Audio] Context initialized at ${this.audioCtx.sampleRate} Hz`);
         }
     },
 
     // ==========================================
-    // 1. TRANSMITTER ENGINE (TX - Single-Tone FSK)
+    // 1. TRANSMITTER ENGINE (Legion i7 Optimized)
     // ==========================================
-
-    playTone: function(frequency, durationMs) {
-        if (!this.audioCtx) return;
+    playParallelTones: function(frequencies, durationMs) {
+        if (!this.audioCtx || frequencies.length === 0) return;
 
         const now = this.audioCtx.currentTime;
         const durationSec = durationMs / 1000;
-        
-        const oscillator = this.audioCtx.createOscillator();
-        const gainNode = this.audioCtx.createGain();
+        const masterGain = this.audioCtx.createGain();
 
-        oscillator.type = 'sine';
-        oscillator.frequency.value = frequency;
+        // Prevent Legion i7 speakers from distorting by dividing volume by active tones
+        const peakVolume = 0.9 / Math.max(1, frequencies.length);
 
-        // Smooth gain envelope to prevent clicking
-        gainNode.gain.setValueAtTime(0, now);
-        gainNode.gain.linearRampToValueAtTime(0.8, now + 0.002);
-        gainNode.gain.setValueAtTime(0.8, now + durationSec - 0.002);
-        gainNode.gain.linearRampToValueAtTime(0, now + durationSec);
+        masterGain.gain.setValueAtTime(0, now);
+        masterGain.gain.linearRampToValueAtTime(peakVolume, now + 0.005);
+        masterGain.gain.setValueAtTime(peakVolume, now + durationSec - 0.005);
+        masterGain.gain.linearRampToValueAtTime(0, now + durationSec);
+        masterGain.connect(this.audioCtx.destination);
 
-        oscillator.connect(gainNode);
-        gainNode.connect(this.audioCtx.destination);
-
-        oscillator.start(now);
-        oscillator.stop(now + durationSec);
+        frequencies.forEach(freq => {
+            const osc = this.audioCtx.createOscillator();
+            osc.type = 'sine';
+            osc.frequency.value = freq;
+            osc.connect(masterGain);
+            osc.start(now);
+            osc.stop(now + durationSec);
+        });
     },
 
     transmitPayload: async function(payloadBytes) {
         if (!this.audioCtx) this.init();
+        console.log(`[TX] Broadcasting ${payloadBytes.length} bytes...`);
 
-        console.log(`[TX] Initiating single-lane FSK transmission: ${payloadBytes.length} bytes...`);
+        // 1. PREAMBLE WAKEUP
+        this.playParallelTones([this.START_FREQ], 300);
+        await this.sleep(400); // Wait for auditorium echo to clear
 
-        // 1. Transmit START Marker (19.5kHz)
-        this.playTone(this.START_FREQ, 150);
-        await this.sleep(170);
+        // 2. PILOT SYNC (Aligns receiver clock)
+        this.playParallelTones([this.SYNC_FREQ], 50);
+        await this.sleep(50 + this.GUARD_GAP);
 
-        // 2. Transmit Payload Bit-by-Bit
+        // 3. PAYLOAD DATA (4 bits per symbol)
         for (let i = 0; i < payloadBytes.length; i++) {
             const byte = payloadBytes[i];
             
-            for (let b = 7; b >= 0; b--) {
-                const bit = (byte >> b) & 1;
-                const targetFreq = (bit === 1) ? this.FREQ_1 : this.FREQ_0;
+            for (let nibbleIdx = 1; nibbleIdx >= 0; nibbleIdx--) {
+                const activeFreqs = [];
+                const shift = nibbleIdx * 4;
+                const nibble = (byte >> shift) & 0x0F;
+
+                for (let bit = 0; bit < 4; bit++) {
+                    if ((nibble >> bit) & 1) activeFreqs.push(this.LANE_FREQS[bit]);
+                }
+
+                if (activeFreqs.length > 0) {
+                    this.playParallelTones(activeFreqs, this.BAUD_RATE);
+                }
                 
-                this.playTone(targetFreq, this.BAUD_RATE);
-                await this.sleep(this.BAUD_RATE);
+                await this.sleep(this.BAUD_RATE + this.GUARD_GAP);
             }
         }
 
-        // 3. Transmit END Marker (19.8kHz)
-        await this.sleep(50);
-        this.playTone(this.END_FREQ, 150);
-        console.log("[TX] Transmission complete. END marker emitted.");
+        // 4. END MARKER
+        await this.sleep(100);
+        this.playParallelTones([this.END_FREQ], 300);
+        console.log("[TX] Transmission complete.");
     },
 
     // ==========================================
-    // 2. RECEIVER ENGINE (RX - Single-Lane Demodulation)
+    // 2. RECEIVER ENGINE (MacBook M5 Optimized)
     // ==========================================
-
-    startReceiver: async function(onDataComplete) {
+    startReceiver: async function(onDataComplete, targetByteLength = null) {
         if (!this.audioCtx) this.init();
         if (this.isListening) return;
 
         try {
-            // FIX 1: Request RAW audio. Disable all browser filters that destroy ultrasonic data.
+            // Bypass Apple's aggressive voice-isolation DSP
             this.micStream = await navigator.mediaDevices.getUserMedia({ 
-                audio: {
-                    echoCancellation: false,
-                    noiseSuppression: false,
-                    autoGainControl: false
-                }, 
+                audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false }, 
                 video: false 
             });
             
             const source = this.audioCtx.createMediaStreamSource(this.micStream);
-
             this.analyser = this.audioCtx.createAnalyser();
             this.analyser.fftSize = 2048; 
             source.connect(this.analyser);
 
             this.isListening = true;
-            console.log("[RX] Mic buffer online (RAW AUDIO). Listening for FSK chirps...");
+            console.log("[RX] Receiver Armed. Hardware filters bypassed.");
 
-            this.listenLoop(onDataComplete);
+            this.listenLoop(onDataComplete, targetByteLength);
         } catch (err) {
-            console.error("[RX] Failed to access microphone:", err);
+            console.error("[RX] Mic access denied:", err);
         }
     },
 
-
-    /**
-     * Scans a target frequency band (+/- toleranceHz) and returns peak magnitude.
-     */
-    getMagnitudeAtFreqRange: function(dataArray, targetFreq, toleranceHz = 100) {
-        const sampleRate = this.audioCtx.sampleRate;
-        const minFreq = targetFreq - toleranceHz;
-        const maxFreq = targetFreq + toleranceHz;
-
-        const startBin = Math.floor((minFreq * this.analyser.fftSize) / sampleRate);
-        const endBin = Math.ceil((maxFreq * this.analyser.fftSize) / sampleRate);
-
-        let maxMagnitude = 0;
-        for (let i = startBin; i <= endBin; i++) {
-            if (dataArray[i] > maxMagnitude) {
-                maxMagnitude = dataArray[i];
-            }
-        }
-        return maxMagnitude;
-    },
-
-    listenLoop: function(onDataComplete) {
+    listenLoop: function(onDataComplete, targetByteLength) {
         const bufferLength = this.analyser.frequencyBinCount;
         const dataArray = new Uint8Array(bufferLength);
 
-        let receivingFrame = false;
+        let state = 'IDLE'; // IDLE -> AWAIT_CLEARANCE -> AWAIT_SYNC -> RECORDING
         let receivedBits = [];
         let lastBitTime = 0;
+        const expectedBits = targetByteLength ? targetByteLength * 8 : Infinity;
 
         const pollAudio = () => {
             if (!this.isListening) return;
 
             this.analyser.getByteFrequencyData(dataArray);
-
             const sampleRate = this.audioCtx.sampleRate;
             const fftSize = this.analyser.fftSize;
 
-            // Helper to get peak volume in a frequency range dynamically
-            const getPeakInRange = (targetFreq, radiusHz = 400) => {
-                const minBin = Math.max(0, Math.floor(((targetFreq - radiusHz) * fftSize) / sampleRate));
-                const maxBin = Math.min(bufferLength - 1, Math.ceil(((targetFreq + radiusHz) * fftSize) / sampleRate));
-                
-                let maxVal = 0;
+            // Tight +/- 100Hz isolation to eliminate overlapping bin logic
+            const getPeak = (freq) => {
+                const minBin = Math.floor(((freq - 100) * fftSize) / sampleRate);
+                const maxBin = Math.ceil(((freq + 100) * fftSize) / sampleRate);
+                let max = 0;
                 for (let i = minBin; i <= maxBin; i++) {
-                    if (dataArray[i] > maxVal) maxVal = dataArray[i];
+                    if (dataArray[i] > max) max = dataArray[i];
                 }
-                return maxVal;
+                return max;
             };
 
-            // Measure magnitudes with a wide 400Hz search window
-            const startMag = getPeakInRange(this.START_FREQ, 400);
-            const endMag   = getPeakInRange(this.END_FREQ, 400);
+            const startMag = getPeak(this.START_FREQ);
+            const syncMag  = getPeak(this.SYNC_FREQ);
+            const endMag   = getPeak(this.END_FREQ);
 
-            // LOWER THRESHOLD TO 40 FOR GATE 1 TESTING
-            const SENSITIVITY_THRESHOLD = 40; 
-
-            // Live Log to Console so you can see the microphone reacting
-            if (startMag > 20) {
-                console.log(`[Mic Live] Hearing ~19.5kHz at Amplitude: ${startMag}`);
+            // STATE 1: IDLE (Scan for 17kHz Wakeup)
+            if (state === 'IDLE') {
+                if (startMag > this.THRESHOLD) {
+                    state = 'AWAIT_CLEARANCE';
+                    receivedBits = [];
+                    console.log("%c[RX 1/4] Preamble Detected. Awaiting echo clearance...", "color: #f59e0b; font-weight: bold;");
+                }
             }
 
-            // 1. DETECT START MARKER
-            if (!receivingFrame && startMag > SENSITIVITY_THRESHOLD) {
-                receivingFrame = true;
-                receivedBits = [];
-                console.log(`%c[RX] 🎯 PREAMBLE LOCKED! Amplitude: ${startMag}`, "color: #7ed321; font-weight: bold; font-size: 14px;");
+            // STATE 2: CLEARANCE (Wait for 17kHz to fade out in the auditorium)
+            else if (state === 'AWAIT_CLEARANCE') {
+                if (startMag < this.THRESHOLD - 10) {
+                    state = 'AWAIT_SYNC';
+                    console.log("%c[RX 2/4] Channel Clear. Awaiting Pilot Sync...", "color: #eab308; font-weight: bold;");
+                }
             }
 
-            // 2. PARSE BITS SEQUENTIALLY
-            if (receivingFrame) {
+            // STATE 3: SYNC (Lock clock exactly to the 16.5kHz pilot tone)
+            else if (state === 'AWAIT_SYNC') {
+                if (syncMag > this.THRESHOLD) {
+                    state = 'RECORDING';
+                    // Set clock to sample precisely in the middle of the upcoming data pulses
+                    lastBitTime = Date.now() + (this.BAUD_RATE / 2); 
+                    console.log("%c[RX 3/4] Clock Synced! Recording bits...", "color: #3b82f6; font-weight: bold;");
+                }
+            }
+
+            // STATE 4: RECORDING (Read exact byte chunks)
+            else if (state === 'RECORDING') {
                 const now = Date.now();
+                const frameInterval = this.BAUD_RATE + this.GUARD_GAP;
 
-                if (now - lastBitTime >= this.BAUD_RATE) {
-                    const mag0 = getPeakInRange(this.FREQ_0, 200);
-                    const mag1 = getPeakInRange(this.FREQ_1, 200);
+                if (now - lastBitTime >= frameInterval) {
+                    const currentNibble = [0, 0, 0, 0];
 
-                    if (mag0 > SENSITIVITY_THRESHOLD || mag1 > SENSITIVITY_THRESHOLD) {
-                        const bit = (mag1 > mag0) ? 1 : 0;
-                        receivedBits.push(bit);
-                        lastBitTime = now;
+                    for (let i = 0; i < 4; i++) {
+                        if (getPeak(this.LANE_FREQS[i]) > this.THRESHOLD) {
+                            currentNibble[i] = 1;
+                        }
+                    }
+
+                    receivedBits.push(currentNibble[3], currentNibble[2], currentNibble[1], currentNibble[0]);
+                    console.log(`[RX] Nibble ${receivedBits.length/4}: ${currentNibble.slice().reverse().join('')}`);
+                    lastBitTime = now;
+
+                    // Stop condition A: Reached exact strict length
+                    if (receivedBits.length >= expectedBits) {
+                        this.finishReception(receivedBits, onDataComplete);
+                        return;
                     }
                 }
 
-                // 3. DETECT END MARKER
-                if (endMag > SENSITIVITY_THRESHOLD && receivedBits.length > 0) {
-                    receivingFrame = false;
-                    console.log(`%c[RX] 🏁 END FREQUENCY DETECTED! Total bits parsed: ${receivedBits.length}`, "color: #0ea5e9; font-weight: bold;");
-
-                    const finalBytes = this.reconstructBytesFromBits(receivedBits);
-                    this.stopReceiver();
-
-                    if (onDataComplete) onDataComplete(finalBytes);
+                // Stop condition B: Detected End frequency (useful for unknown file sizes)
+                if (endMag > this.THRESHOLD && receivedBits.length >= 8) {
+                    this.finishReception(receivedBits, onDataComplete);
                     return;
                 }
             }
@@ -217,14 +226,19 @@ const AudioPipeline = {
         pollAudio();
     },
 
+    finishReception: function(receivedBits, onDataComplete) {
+        this.stopReceiver();
+        const finalBytes = this.reconstructBytesFromBits(receivedBits);
+        console.log("%c[RX 4/4] SUCCESS! Array Reconstructed:", "color: #7ed321; font-weight: bold; font-size: 14px;", finalBytes);
+        if (onDataComplete) onDataComplete(finalBytes);
+    },
+
     reconstructBytesFromBits: function(bits) {
         const bytes = [];
         for (let i = 0; i < bits.length; i += 8) {
             if (i + 8 <= bits.length) {
                 let byte = 0;
-                for (let b = 0; b < 8; b++) {
-                    byte = (byte << 1) | bits[i + b];
-                }
+                for (let b = 0; b < 8; b++) byte = (byte << 1) | bits[i + b];
                 bytes.push(byte);
             }
         }
@@ -233,13 +247,17 @@ const AudioPipeline = {
 
     stopReceiver: function() {
         this.isListening = false;
-        if (this.micStream) {
-            this.micStream.getTracks().forEach(track => track.stop());
-        }
-        console.log("[RX] Receiver stopped.");
+        if (this.micStream) this.micStream.getTracks().forEach(track => track.stop());
     },
 
     sleep: function(ms) {
         return new Promise(resolve => setTimeout(resolve, ms));
+    },
+
+    // GATE 2 TEST HARNESS (Transmits 0xAA)
+    transmitTestByte: async function() {
+        if (!this.audioCtx) this.init();
+        console.log("%c[TX] Sending test byte (10101010)...", "color: #f59e0b; font-weight: bold;");
+        await this.transmitPayload(new Uint8Array([170]));
     }
 };
