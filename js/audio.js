@@ -1,15 +1,15 @@
-// js/audio.js - Unified Transmitter & Receiver Audio Pipeline
+// js/audio.js - Unified Transmitter & Gate-1 Receiver Pipeline
 
 const AudioPipeline = {
     audioCtx: null,
     analyser: null,
     isListening: false,
     
-    // Frequencies mapped for hackathon MVP (staying in the 17.5 - 19.5kHz safe zone)[cite: 7]
-    FREQ_0: 17500,        // Represents a binary '0'[cite: 7]
-    FREQ_1: 18500,        // Represents a binary '1'[cite: 7]
-    PREAMBLE_FREQ: 19500, // Used to wake up the receiver[cite: 7]
-    BAUD_RATE: 50,        // Milliseconds per bit (Speed of transmission)[cite: 7]
+    // Frequencies mapped for hackathon MVP (17kHz - 20kHz safe zone)[cite: 3]
+    FREQ_0: 17500,        // Represents a binary '0'
+    FREQ_1: 18500,        // Represents a binary '1'
+    PREAMBLE_FREQ: 19500, // Synchronisation wake-up tone[cite: 3]
+    BAUD_RATE: 50,        // Milliseconds per bit
 
     /**
      * Initializes the Web Audio API Context. 
@@ -33,6 +33,7 @@ const AudioPipeline = {
         oscillator.type = 'sine';
         oscillator.frequency.value = frequency;
 
+        // Smooth amplitude envelope to prevent speaker clicking
         gainNode.gain.setValueAtTime(0, this.audioCtx.currentTime);
         gainNode.gain.linearRampToValueAtTime(1, this.audioCtx.currentTime + 0.01);
         gainNode.gain.setValueAtTime(1, this.audioCtx.currentTime + (durationMs / 1000) - 0.01);
@@ -46,19 +47,21 @@ const AudioPipeline = {
     },
 
     /**
-     * Converts a Uint8Array into a sequence of audio tones (Modulation).
+     * Transmits a payload with a synchronised preamble tone[cite: 3].
      */
     transmitPayload: async function(payloadBytes) {
         if (!this.audioCtx) this.init();
         
-        console.log(`Starting acoustic transmission of ${payloadBytes.length} bytes...`);
+        console.log(`[TX] Starting acoustic transmission of ${payloadBytes.length} bytes...`);
 
-        this.playTone(this.PREAMBLE_FREQ, 200);
-        await this.sleep(200);
+        // 1. Play the Preamble Tone to wake up receiver
+        console.log(`[TX] Broadcasting Preamble at ${this.PREAMBLE_FREQ}Hz...`);
+        this.playTone(this.PREAMBLE_FREQ, 300);
+        await this.sleep(300);
 
+        // 2. Transmit data bit-by-bit
         for (let i = 0; i < payloadBytes.length; i++) {
             let byte = payloadBytes[i];
-            
             for (let b = 7; b >= 0; b--) {
                 const bit = (byte >> b) & 1;
                 const targetFreq = bit === 1 ? this.FREQ_1 : this.FREQ_0;
@@ -67,11 +70,11 @@ const AudioPipeline = {
                 await this.sleep(this.BAUD_RATE);
             }
         }
-        console.log("Transmission complete.");
+        console.log("[TX] Transmission complete.");
     },
 
     /**
-     * Initialize Audio Context and Request Microphone Access for Receiver
+     * Opens the microphone buffer to listen for incoming chirps.
      */
     initReceiver: async function() {
         try {
@@ -87,51 +90,52 @@ const AudioPipeline = {
 
             const source = this.audioCtx.createMediaStreamSource(stream);
             this.analyser = this.audioCtx.createAnalyser();
-            this.analyser.fftSize = 2048;
+            this.analyser.fftSize = 2048; // High resolution frequency bins
             
             source.connect(this.analyser);
             this.isListening = true;
             
-            console.log("MIC BUFFER OPEN: Listening for near-ultrasonic chirps (17kHz - 20kHz)...");
+            console.log("[RX] MIC BUFFER OPEN: Listening for Preamble (19.5kHz)...");
             this.startListeningLoop();
             
             return true;
         } catch (err) {
-            console.error("Microphone access denied or unsupported:", err);
+            console.error("[RX] Microphone access denied or unsupported:", err);
             alert("Microphone permission is required to receive acoustic data.");
             return false;
         }
     },
 
     /**
-     * Continuous FFT Frequency Polling Loop
+     * Continuous FFT Frequency Polling Loop (Gate 1 Focus)
      */
     startListeningLoop: function() {
         const bufferLength = this.analyser.frequencyBinCount;
         const dataArray = new Uint8Array(bufferLength);
         
+        let preambleDetectedCount = 0;
+
         const evaluateSpectrum = () => {
             if (!this.isListening) return;
 
             this.analyser.getByteFrequencyData(dataArray);
 
-            const nyquist = this.audioCtx.sampleRate / 2;
-            const targetMinBin = Math.floor(17000 * bufferLength / nyquist);
-            const targetMaxBin = Math.floor(20000 * bufferLength / nyquist);
+            // Calculate exact FFT bin corresponding to our Preamble Frequency (19500 Hz)
+            const sampleRate = this.audioCtx.sampleRate;
+            const binWidth = sampleRate / this.analyser.fftSize;
+            const targetBin = Math.round(this.PREAMBLE_FREQ / binWidth);
 
-            let peakVolume = 0;
-            let peakBin = -1;
+            // Check the amplitude of the exact preamble bin
+            const preambleAmplitude = dataArray[targetBin] || 0;
 
-            for (let i = targetMinBin; i <= targetMaxBin; i++) {
-                if (dataArray[i] > peakVolume) {
-                    peakVolume = dataArray[i];
-                    peakBin = i;
-                }
-            }
-
-            if (peakVolume > 180) {
-                const detectedFrequency = (peakBin * nyquist) / bufferLength;
-                console.log(`Chirp detected ~${detectedFrequency.toFixed(1)} Hz | Amplitude: ${peakVolume}`);
+            // Threshold set high enough to ignore routine room background noise
+            if (preambleAmplitude > 200) {
+                preambleDetectedCount++;
+                console.warn(`[RX] 🎯 PREAMBLE LOCKED! Frequency: ~${this.PREAMBLE_FREQ}Hz | Amplitude: ${preambleAmplitude} | Hits: ${preambleDetectedCount}`);
+                
+                // Visual feedback update on UI if status dot exists
+                const statusDot = document.getElementById('statusDot');
+                if (statusDot) statusDot.className = "dot active";
             }
 
             requestAnimationFrame(evaluateSpectrum);
@@ -145,5 +149,4 @@ const AudioPipeline = {
     }
 };
 
-// Expose globally so app.js can access it safely
 window.AudioPipeline = AudioPipeline;
