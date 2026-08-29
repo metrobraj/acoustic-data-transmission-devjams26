@@ -1,35 +1,34 @@
 // js/app.js
 
 document.addEventListener('DOMContentLoaded', () => {
-    // UI Elements
     const fileInput = document.getElementById('fileInput');
     const fileName = document.getElementById('fileName');
     const fileSize = document.getElementById('fileSize');
     const btnTransmit = document.getElementById('btnTransmit');
-    
-    // Mode Selection Buttons
     const btnSelectTx = document.getElementById('btnSelectTx');
     const btnSelectRx = document.getElementById('btnSelectRx');
     const txPanel = document.getElementById('txPanel');
     const rxPanel = document.getElementById('rxPanel');
     const statusText = document.querySelector('.statustext');
 
-    // Handle Mode Toggles
+    let readyPayload = null; // Will store the final Uint8Array ready for modulation
+
     if (btnSelectTx && btnSelectRx) {
         btnSelectTx.addEventListener('click', () => {
             txPanel.classList.remove('hidden');
             rxPanel.classList.add('hidden');
             statusText.textContent = 'SYSTEM ACTIVE || MODE: TRANSMITTER (TX)';
+            AudioPipeline.init(); 
         });
 
         btnSelectRx.addEventListener('click', () => {
             rxPanel.classList.remove('hidden');
             txPanel.classList.add('hidden');
             statusText.textContent = 'SYSTEM ACTIVE || MODE: RECEIVER (RX)';
+            AudioPipeline.init();
         });
     }
 
-    // Handle File Selection & Compression Pipeline Integration
     if (fileInput) {
         fileInput.addEventListener('change', (event) => {
             const file = event.target.files[0];
@@ -41,19 +40,30 @@ document.addEventListener('DOMContentLoaded', () => {
 
             const reader = new FileReader();
             reader.onload = function(e) {
-                const arrayBuffer = e.target.result;
-                const rawBytes = new Uint8Array(arrayBuffer);
+                // 1. Extract raw binary file bytes directly into a Uint8Array
+                const rawBytes = new Uint8Array(e.target.result);
                 
-                // Convert binary file content to string format for the data pipeline
-                const decoder = new TextDecoder('iso-8859-1'); // preserves raw byte integrity
-                const textContent = decoder.decode(rawBytes);
-
-                // Pass through your DataPipeline (data.js) instead of calling pako/fflate directly!
-                const processedPayload = DataPipeline.compressPayload(textContent);
+                // 2. Compress and get a pure Uint8Array ready for audio transmission
+                readyPayload = DataPipeline.compressPayload(rawBytes);
                 
-                console.log(`Processed binary payload ready for modulation: ${processedPayload.length} bytes.`);
+                console.log("Ready payload Uint8Array:", readyPayload);
             };
             reader.readAsArrayBuffer(file);
+        });
+    }
+
+    if (btnTransmit) {
+        btnTransmit.addEventListener('click', () => {
+            if (readyPayload && readyPayload instanceof Uint8Array) {
+                btnTransmit.textContent = "TRANSMITTING...";
+                btnTransmit.disabled = true;
+
+                // Pass the pure Uint8Array into the audio transmitter
+                AudioPipeline.transmitPayload(readyPayload).then(() => {
+                    btnTransmit.textContent = "INITIATE CHIRP";
+                    btnTransmit.disabled = false;
+                });
+            }
         });
     }
 });
