@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>AirChirp</title>
+
+        <!--external library&font-->
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/pako/2.1.0/pako.min.js"></script>
+        <link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;700&display=swap" rel="stylesheet">
+        <link rel="stylesheet" href="css/style.css">
+        </head>
+    <body>
+        <div class="appcontain">
+            <!--headersection-->
+            <header class="cyberheader">
+                <h1>AIRCHIRP // SECURE ACOUSTIC LINK</h1>
+                <div class = "status">
+                    <span class="dot offline"></span>
+                    <span class="statustext">SYSTEM STANDBY || AWAITING MODE TYPE</span>
+                </div>
+            </header>
+            <!--main dashboard-->
+
+            <main class="dashboard">
+                <!--security work-->
+                <section class="panel security-panel">
+                    <h2>[ ENCRYPTION KEY ]</h2>
+                    <input type="password" id="secretKey" placeholder="ENTER KEY" />
+                </section>
+                <!-- 1. Mode Selection Screen (Visible Initially) -->
+                <section class="panel mode-selection" id="modeSelector">
+                    <h2>[ SELECT TERMINAL ROLE ]</h2>
+                    <div class="button-group">
+                        <button id="btnSelectTx" class="btn-large btn-tx">ENGAGE TRANSMITTER (TX)</button>
+                        <button id="btnSelectRx" class="btn-large btn-rx">ENGAGE RECEIVER (RX)</button>
+                    </div>
+                </section>
+                <!-- Dynamic Workspace -->
+            <div id="dynamicWorkspace">
+                
+                <!-- Transmitter UI (File Upload) -->
+                <section id="txPanel" class="panel workspace-panel">
+                    <h2>[ TX // SELECT FILE ]</h2>
+                    <div class="file-drop-zone">
+                        <input type="file" id="fileInput" class="file-input" />
+                        <label for="fileInput" class="file-label">Click to Browse or Drag File Here</label>
+                    </div>
+                    <div class="file-metadata">
+                        <span id="fileName">No file selected.</span>
+                        <span id="fileSize">0 KB</span>
+                    </div>
+                    <button id="btnTransmit" class="btn-primary" disabled>INITIATE CHIRP</button>
+                </section>
+
+                <!-- Receiver UI (File Download) -->
+                <section id="rxPanel" class="panel workspace-panel hidden">
+                    <h2>[ RX // AWAITING DATA ]</h2>
+                    <button id="btnReceive" class="btn-secondary">OPEN MIC BUFFER</button>
+                    <div class="download-zone hidden" id="downloadZone">
+                        <p>File Decoded Successfully!</p>
+                        <!-- JavaScript will inject the file data into this link -->
+                        <a id="downloadLink" class="btn-download" download>Download File</a>
+                    </div>
+                </section>
+                
+            </div>
+            <!-- Spectrogram Visualization -->
+            <section class="panel visualizer-panel">
+                <h2>[ REAL-TIME FFT ANALYSIS ]</h2>
+                <div class="canvas-container">
+                    <canvas id="spectrogramCanvas"></canvas>
+                </div>
+            </section>
+            </main>
+
+        </div>
+        <script src="js/app.js"></script>
+    </body>
+</html>
