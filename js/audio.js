@@ -25,7 +25,7 @@ const AudioPipeline = {
     // ----------------------------------------------------
     BAUD_RATE: 45,     // Duration of each tone pulse (ms)
     GUARD_GAP: 25,     // Dead-air between pulses to stop echo overlap (ms)
-    THRESHOLD: 45,     // Amplitude required to register a 1 (out of 255)
+    THRESHOLD: 35,     // Amplitude required to register a 1 (out of 255)
 
     init: function() {
         if (!this.audioCtx) {
@@ -148,8 +148,8 @@ const AudioPipeline = {
 
             // Tight +/- 100Hz isolation to eliminate overlapping bin logic
             const getPeak = (freq) => {
-                const minBin = Math.floor(((freq - 100) * fftSize) / sampleRate);
-                const maxBin = Math.ceil(((freq + 100) * fftSize) / sampleRate);
+                const minBin = Math.floor(((freq - 50) * fftSize) / sampleRate);
+                const maxBin = Math.ceil(((freq + 50) * fftSize) / sampleRate);
                 let max = 0;
                 for (let i = minBin; i <= maxBin; i++) {
                     if (dataArray[i] > max) max = dataArray[i];
@@ -202,8 +202,16 @@ const AudioPipeline = {
                         }
                     }
 
-                    receivedBits.push(currentNibble[3], currentNibble[2], currentNibble[1], currentNibble[0]);
-                    console.log(`[RX] Nibble ${receivedBits.length/4}: ${currentNibble.slice().reverse().join('')}`);
+                    // Push bits strictly from Lane 3 (MSB) down to Lane 0 (LSB)
+                    receivedBits.push(
+                        currentNibble[3], 
+                        currentNibble[2], 
+                        currentNibble[1], 
+                        currentNibble[0]
+                    );
+
+                    const binaryStr = `${currentNibble[3]}${currentNibble[2]}${currentNibble[1]}${currentNibble[0]}`;
+                    console.log(`[RX] Nibble ${receivedBits.length/4}: ${binaryStr}`);
                     lastBitTime = now;
 
                     // Stop condition A: Reached exact strict length
