@@ -12,7 +12,7 @@ const AudioPipeline = {
     START_FREQ: 19500,   // Frame Start Marker
     END_FREQ: 19800,     // Frame End Marker
 
-    BAUD_RATE: 15,       // Symbol duration per bit (ms)
+    BAUD_RATE: 30,       // Symbol duration per bit (ms)
 
     /**
      * Initializes AudioContext on user gesture.
@@ -90,21 +90,31 @@ const AudioPipeline = {
         if (this.isListening) return;
 
         try {
-            this.micStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+            // FIX 1: Request RAW audio. Disable all browser filters that destroy ultrasonic data.
+            this.micStream = await navigator.mediaDevices.getUserMedia({ 
+                audio: {
+                    echoCancellation: false,
+                    noiseSuppression: false,
+                    autoGainControl: false
+                }, 
+                video: false 
+            });
+            
             const source = this.audioCtx.createMediaStreamSource(this.micStream);
 
             this.analyser = this.audioCtx.createAnalyser();
-            this.analyser.fftSize = 2048; // Resolves ~23.4Hz per bin
+            this.analyser.fftSize = 2048; 
             source.connect(this.analyser);
 
             this.isListening = true;
-            console.log("[RX] Mic buffer online. Listening for FSK chirps...");
+            console.log("[RX] Mic buffer online (RAW AUDIO). Listening for FSK chirps...");
 
             this.listenLoop(onDataComplete);
         } catch (err) {
             console.error("[RX] Failed to access microphone:", err);
         }
     },
+
 
     /**
      * Scans a target frequency band (+/- toleranceHz) and returns peak magnitude.
@@ -139,19 +149,38 @@ const AudioPipeline = {
 
             this.analyser.getByteFrequencyData(dataArray);
 
-            // Calculate dynamic noise floor threshold
-            const averageNoise = dataArray.reduce((a, b) => a + b, 0) / dataArray.length;
-            const dynamicThreshold = Math.max(90, averageNoise * 1.6); // Floor of 90, or 60% above background noise
+            const sampleRate = this.audioCtx.sampleRate;
+            const fftSize = this.analyser.fftSize;
 
-            // Read markers with +/- 120Hz tolerance
-            const startMag = this.getMagnitudeAtFreqRange(dataArray, this.START_FREQ, 120);
-            const endMag   = this.getMagnitudeAtFreqRange(dataArray, this.END_FREQ, 120);
+            // Helper to get peak volume in a frequency range dynamically
+            const getPeakInRange = (targetFreq, radiusHz = 400) => {
+                const minBin = Math.max(0, Math.floor(((targetFreq - radiusHz) * fftSize) / sampleRate));
+                const maxBin = Math.min(bufferLength - 1, Math.ceil(((targetFreq + radiusHz) * fftSize) / sampleRate));
+                
+                let maxVal = 0;
+                for (let i = minBin; i <= maxBin; i++) {
+                    if (dataArray[i] > maxVal) maxVal = dataArray[i];
+                }
+                return maxVal;
+            };
+
+            // Measure magnitudes with a wide 400Hz search window
+            const startMag = getPeakInRange(this.START_FREQ, 400);
+            const endMag   = getPeakInRange(this.END_FREQ, 400);
+
+            // LOWER THRESHOLD TO 40 FOR GATE 1 TESTING
+            const SENSITIVITY_THRESHOLD = 40; 
+
+            // Live Log to Console so you can see the microphone reacting
+            if (startMag > 20) {
+                console.log(`[Mic Live] Hearing ~19.5kHz at Amplitude: ${startMag}`);
+            }
 
             // 1. DETECT START MARKER
-            if (!receivingFrame && startMag > dynamicThreshold) {
+            if (!receivingFrame && startMag > SENSITIVITY_THRESHOLD) {
                 receivingFrame = true;
                 receivedBits = [];
-                console.log("%c[RX] DETECTED START FREQUENCY (19.5kHz)!", "color: #7ed321; font-weight: bold;");
+                console.log(`%c[RX] 🎯 PREAMBLE LOCKED! Amplitude: ${startMag}`, "color: #7ed321; font-weight: bold; font-size: 14px;");
             }
 
             // 2. PARSE BITS SEQUENTIALLY
@@ -159,11 +188,10 @@ const AudioPipeline = {
                 const now = Date.now();
 
                 if (now - lastBitTime >= this.BAUD_RATE) {
-                    const mag0 = this.getMagnitudeAtFreqRange(dataArray, this.FREQ_0, 80);
-                    const mag1 = this.getMagnitudeAtFreqRange(dataArray, this.FREQ_1, 80);
+                    const mag0 = getPeakInRange(this.FREQ_0, 200);
+                    const mag1 = getPeakInRange(this.FREQ_1, 200);
 
-                    // Determine if a bit frequency peak is present above threshold
-                    if (mag0 > dynamicThreshold || mag1 > dynamicThreshold) {
+                    if (mag0 > SENSITIVITY_THRESHOLD || mag1 > SENSITIVITY_THRESHOLD) {
                         const bit = (mag1 > mag0) ? 1 : 0;
                         receivedBits.push(bit);
                         lastBitTime = now;
@@ -171,9 +199,9 @@ const AudioPipeline = {
                 }
 
                 // 3. DETECT END MARKER
-                if (endMag > dynamicThreshold && receivedBits.length > 0) {
+                if (endMag > SENSITIVITY_THRESHOLD && receivedBits.length > 0) {
                     receivingFrame = false;
-                    console.log("%c[RX] DETECTED END FREQUENCY (19.8kHz)! Assembling bytes...", "color: #0ea5e9; font-weight: bold;");
+                    console.log(`%c[RX] 🏁 END FREQUENCY DETECTED! Total bits parsed: ${receivedBits.length}`, "color: #0ea5e9; font-weight: bold;");
 
                     const finalBytes = this.reconstructBytesFromBits(receivedBits);
                     this.stopReceiver();

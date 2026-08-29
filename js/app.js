@@ -151,14 +151,14 @@ document.addEventListener('DOMContentLoaded', () => {
             btnReceive.disabled = true;
             
             // Calls the receiver function we just added to audio.js
-            const success = await AudioPipeline.initReceiver();
-            if (success) {
-                const statusDot = document.getElementById('statusDot');
-                if(statusDot) statusDot.className = "dot active";
-            } else {
-                btnReceive.textContent = "OPEN MIC BUFFER";
-                btnReceive.disabled = false;
-            }
+            await AudioPipeline.startReceiver((finalBytes) => {
+                console.log("[RX] Payload successfully assembled:", finalBytes);
+                alert("File received successfully!");
+            });
+
+            // Update UI to active listening state
+            const statusDot = document.getElementById('statusDot');
+            if(statusDot) statusDot.className = "dot active";
         });
     }
 
