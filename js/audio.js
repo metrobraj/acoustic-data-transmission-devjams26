@@ -1,170 +1,91 @@
-// js/audio.js - Batch-Analyzed FSK Acoustic Modem (no real-time polling)
-//THIS VERSION OF MAIN WORKS FOR SINGLE LANE TRANSFER.
+// js/audio.js - WebAssembly Acoustic Modem powered by ggwave
 
 const AudioPipeline = {
     audioCtx: null,
+    analyser: null,
+    ggwave: null,
+    ggwaveInstance: null,
     micStream: null,
-    processorNode: null,
     isListening: false,
-    recordedChunks: [],
-    _recordTimeout: null,
 
-    // ----------------------------------------------------
-    // LOW-BAND FSK ALLOCATION (8-12kHz)
-    // ----------------------------------------------------
-    START_FREQ: 8000,
-    FREQ_0:     9000,
-    FREQ_1:     10000,
-    END_FREQ:   11500,
-
-    BAUD_RATE: 45,
-    GUARD_GAP: 55,
-
-    // Raw Goertzel magnitude threshold. This is NOT the same scale as
-    // AnalyserNode's 0-255 output. Watch the console logs on your first
-    // test run and adjust this to sit clearly above your noise floor
-    // and clearly below your tone peaks.
-    THRESHOLD: 15,
-    LANE_FLOOR: 3,
-    LANE_THRESHOLDS: [0.08, 0.08, 0.08, 0.08],
-    PREAMBLE_GAP_SEC: 0.45,
-    SYMBOL_ANALYSIS_MS: 25,   // narrower window than BAUD_RATE, avoids the 5ms fade-in/out ramps
-    SYMBOL_OFFSET_MS: 10,      // skip past the fade-in before sampling
-
-    RECORD_DURATION_MS: 12000, // max listening window before auto-analyzing
-
-    init: function() {
+    init: async function() {
         if (!this.audioCtx) {
             this.audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-            console.log(`[Audio] Context initialized at ${this.audioCtx.sampleRate} Hz`);
+        }
+        if (!this.ggwave) {
+            // Initialize WebAssembly Factory
+            this.ggwave = await ggwave_factory();
+            
+            // EXACT FIX: Pass all required parameters to the C++ bindings
+            const parameters = this.ggwave.getDefaultParameters();
+            parameters.sampleRateIn = this.audioCtx.sampleRate;
+            parameters.sampleRateOut = this.audioCtx.sampleRate;
+            parameters.soundMarkerThreshold = 4;
+            parameters.payloadLength = 0; // 0 = dynamic/variable length in ggwave parameters
+
+            this.ggwaveInstance = this.ggwave.init(parameters);
+            
+            console.log("[Audio] ggwave WASM Engine initialized successfully.");
         }
     },
-
     // ==========================================
-    // 1. TRANSMITTER ENGINE
+    // 1. TRANSMITTER ENGINE (ggwave WASM)
     // ==========================================
-    playTone: function(frequency, durationMs) {
-        if (!this.audioCtx) return;
-
-        const now = this.audioCtx.currentTime;
-        const durationSec = durationMs / 1000;
-        const masterGain = this.audioCtx.createGain();
-        const peakVolume = 0.9;
-
-        masterGain.gain.setValueAtTime(0, now);
-        masterGain.gain.linearRampToValueAtTime(peakVolume, now + 0.005);
-        masterGain.gain.setValueAtTime(peakVolume, now + durationSec - 0.005);
-        masterGain.gain.linearRampToValueAtTime(0, now + durationSec);
-        masterGain.connect(this.audioCtx.destination);
-
-        const osc = this.audioCtx.createOscillator();
-        osc.type = 'sine';
-        osc.frequency.value = frequency;
-        osc.connect(masterGain);
-        osc.start(now);
-        osc.stop(now + durationSec);
-    },
-
     transmitPayload: async function(payloadBytes) {
-    if (!this.audioCtx) this.init();
+        await this.init();
+        console.log(`[TX] Encoding ${payloadBytes.length} bytes via ggwave at higher speed...`);
 
-    const length = payloadBytes.length;
-    const lengthHigh = (length >> 8) & 0xFF;
-    const lengthLow  = length & 0xFF;
-    let checksum = 0;
-    for (let i = 0; i < payloadBytes.length; i++) checksum ^= payloadBytes[i];
-
-    const packet = new Uint8Array(payloadBytes.length + 3);
-    packet[0] = lengthHigh;
-    packet[1] = lengthLow;
-    packet.set(payloadBytes, 2);
-    packet[packet.length - 1] = checksum;
-
-    console.log(`[TX] Packet created: length=${length}B, checksum=0x${checksum.toString(16).toUpperCase()}`);
-
-    const frameInterval = (this.BAUD_RATE + this.GUARD_GAP) / 1000; // seconds
-    const baudSec = this.BAUD_RATE / 1000;
-    let t = this.audioCtx.currentTime + 0.1; // small safety lead-in
-
-    // Preamble
-    this.scheduleTone(this.START_FREQ, t, 0.3);
-    t += 0.35;
-
-    // Payload — every bit's start time computed from a single fixed origin,
-    // so no per-bit scheduling error can accumulate.
-    for (let i = 0; i < packet.length; i++) {
-        const byte = packet[i];
-        for (let nibbleIdx = 1; nibbleIdx >= 0; nibbleIdx--) {
-            const nibble = (byte >> (nibbleIdx * 4)) & 0x0F;
-            const activeFreqs = [];
-            for (let bit = 0; bit < 4; bit++) {
-                if ((nibble >> bit) & 1) activeFreqs.push(this.LANE_FREQS[bit]);
-            }
-
-            console.log(
-            `[TX SYMBOL] byte=${i} nibble=${nibble.toString(2).padStart(4, '0')} ` + `freqs=${activeFreqs.join(',') || 'NONE'}`
-            );
-            this.scheduleTones(activeFreqs, t, baudSec);
-            t += frameInterval;
+        // 1. Convert payload bytes to a standard string
+        let payloadString = "";
+        for (let i = 0; i < payloadBytes.length; i++) {
+            payloadString += String.fromCharCode(payloadBytes[i]);
         }
-    }
 
-    // End marker
-    t += 0.1;
-    this.scheduleTone(this.END_FREQ, t, 0.3);
-    const totalDurationMs = (t + 0.3 - this.audioCtx.currentTime) * 1000;
+        // 2. Select a high-speed protocol ID integer 
+        // (Typically, 2 or 3 map to faster ultrasonic/audible variants depending on the build)
+        const fastProtocolId = 2; 
+        const volume = 15; // Slightly higher volume to ensure robust high-speed sampling
 
-    console.log(`[TX] All ${packet.length} bytes scheduled on audio clock. Total duration ~${(totalDurationMs/1000).toFixed(2)}s`);
-    await this.sleep(totalDurationMs); // just for the UI/button state, not for pacing
-    console.log("[TX] Transmission complete.");
-},
+        // 3. Generate waveform via WebAssembly
+        const waveform = this.ggwave.encode(
+            this.ggwaveInstance, 
+            payloadString, 
+            fastProtocolId, 
+            volume
+        );
 
-// Same as playTone but takes an explicit start time instead of "now"
-scheduleTone: function(frequency, startTime, durationSec) {
-    const masterGain = this.audioCtx.createGain();
-    const peakVolume = 0.9;
+        if (!waveform || waveform.length === 0) {
+            console.error("[TX] ggwave failed to encode payload.");
+            return;
+        }
 
-    masterGain.gain.setValueAtTime(0, startTime);
-    masterGain.gain.linearRampToValueAtTime(peakVolume, startTime + 0.005);
-    masterGain.gain.setValueAtTime(peakVolume, startTime + durationSec - 0.005);
-    masterGain.gain.linearRampToValueAtTime(0, startTime + durationSec);
-    masterGain.connect(this.audioCtx.destination);
+        console.log(`[TX] Playing high-speed waveform (${waveform.length} samples)...`);
 
-    const osc = this.audioCtx.createOscillator();
-    osc.type = 'sine';
-    osc.frequency.value = frequency;
-    osc.connect(masterGain);
-    osc.start(startTime);
-    osc.stop(startTime + durationSec);
-},
+        // 4. Play through Web Audio API
+        const audioBuffer = this.audioCtx.createBuffer(1, waveform.length, this.audioCtx.sampleRate);
+        audioBuffer.getChannelData(0).set(waveform);
 
-// Schedules MULTIPLE simultaneous tones (one symbol = one nibble = up to 4 tones)
-scheduleTones: function(frequencies, startTime, durationSec) {
-    if (!frequencies.length) return;
-    const masterGain = this.audioCtx.createGain();
-    const peakVolume = 0.22 // prevent clipping when several tones overlap
+        const source = this.audioCtx.createBufferSource();
+        source.buffer = audioBuffer;
 
-    masterGain.gain.setValueAtTime(0, startTime);
-    masterGain.gain.linearRampToValueAtTime(peakVolume, startTime + 0.005);
-    masterGain.gain.setValueAtTime(peakVolume, startTime + durationSec - 0.005);
-    masterGain.gain.linearRampToValueAtTime(0, startTime + durationSec);
-    masterGain.connect(this.audioCtx.destination);
+        if (!this.analyser) {
+            this.analyser = this.audioCtx.createAnalyser();
+            this.analyser.fftSize = 2048;
+        }
+        source.connect(this.analyser);
+        this.analyser.connect(this.audioCtx.destination);
 
-    frequencies.forEach(freq => {
-        const osc = this.audioCtx.createOscillator();
-        osc.type = 'sine';
-        osc.frequency.value = freq;
-        osc.connect(masterGain);
-        osc.start(startTime);
-        osc.stop(startTime + durationSec);
-    });
-},
-
+        source.start();
+        
+        const durationMs = (waveform.length / this.audioCtx.sampleRate) * 1000;
+        await this.sleep(durationMs + 50);
+        console.log("[TX] High-speed transmission complete.");
+    },
     // ==========================================
-    // 2. RECEIVER: COLLECTION PHASE (no analysis)
+    // 2. RECEIVER ENGINE (ggwave WASM)
     // ==========================================
     startReceiver: async function(onDataComplete) {
-        if (!this.audioCtx) this.init();
+        await this.init();
         if (this.isListening) return;
 
         try {
@@ -174,208 +95,75 @@ scheduleTones: function(frequencies, startTime, durationSec) {
             });
 
             const source = this.audioCtx.createMediaStreamSource(this.micStream);
-            this.processorNode = this.audioCtx.createScriptProcessor(4096, 1, 1);
-            this.recordedChunks = [];
+            this.analyser = this.audioCtx.createAnalyser();
+            this.analyser.fftSize = 2048;
+            source.connect(this.analyser);
 
-            this.processorNode.onaudioprocess = (e) => {
-                const input = e.inputBuffer.getChannelData(0);
-                this.recordedChunks.push(new Float32Array(input)); // copy, buffer gets reused
-            };
-
-            // Must connect to destination (through silent gain) for onaudioprocess to fire
-            const silentGain = this.audioCtx.createGain();
-            silentGain.gain.value = 0;
-            source.connect(this.processorNode);
-            this.processorNode.connect(silentGain);
-            silentGain.connect(this.audioCtx.destination);
+            // Create processor to feed live PCM frames directly into ggwave WASM decoder
+            const processor = this.audioCtx.createScriptProcessor(1024, 1, 1);
+            source.connect(processor);
+            processor.connect(this.audioCtx.destination);
 
             this.isListening = true;
-            console.log(`%c[RX] Recording raw audio. Auto-analyzing in ${this.RECORD_DURATION_MS}ms.`, "color:#7ed321;font-weight:bold;");
+            console.log("[RX] Listening for robust ultrasound chirps...");
 
-            this._recordTimeout = setTimeout(() => {
-                this.stopReceiver();
-                this.analyzeRecording(onDataComplete);
-            }, this.RECORD_DURATION_MS);
+            processor.onaudioprocess = (evt) => {
+                if (!this.isListening) return;
 
+                const inputData = evt.inputBuffer.getChannelData(0);
+                
+                const res = this.ggwave.decode(this.ggwaveInstance, pcmInt8);
+                
+                if (res && res.length > 0) {
+                    console.log("[RX] Verified packet received via ggwave!");
+                    
+                    // Convert back to Uint8Array if ggwave returned a string
+                    let uint8Data;
+                    if (typeof res === 'string') {
+                        uint8Data = new Uint8Array(res.length);
+                        for (let i = 0; i < res.length; i++) {
+                            uint8Data[i] = res.charCodeAt(i);
+                        }
+                    } else {
+                        uint8Data = new Uint8Array(res);
+                    }
+
+                    this.stopReceiver();
+                    processor.disconnect();
+                    if (onDataComplete) onDataComplete(uint8Data);
+                }
+
+                // Convert PCM Float32 frame into Int8 array for C++ decoder
+                const pcmInt8 = new Int8Array(inputData.length * 2);
+                for (let i = 0; i < inputData.length; i++) {
+                    const s = Math.max(-1, Math.min(1, inputData[i]));
+                    const val = s < 0 ? s * 0x8000 : s * 0x7FFF;
+                    pcmInt8[i * 2] = val & 0xFF;
+                    pcmInt8[i * 2 + 1] = (val >> 8) & 0xFF;
+                }
+
+                // Decode audio frames through WebAssembly
+                
+                
+                // Trigger callback only when payload passes 16-bit CRC check
+                if (res && res.length > 0) {
+                    console.log("[RX] Payload decoded and verified via CRC!");
+                    this.stopReceiver();
+                    processor.disconnect();
+                    if (onDataComplete) onDataComplete(res);
+                }
+            };
         } catch (err) {
-            console.error("[RX] Mic access denied:", err);
+            console.error("[RX] Mic setup failed:", err);
         }
     },
 
     stopReceiver: function() {
         this.isListening = false;
-        if (this._recordTimeout) { clearTimeout(this._recordTimeout); this._recordTimeout = null; }
-        if (this.processorNode) {
-            this.processorNode.disconnect();
-            this.processorNode.onaudioprocess = null;
-            this.processorNode = null;
-        }
-        if (this.micStream) {
-            this.micStream.getTracks().forEach(track => track.stop());
-            this.micStream = null;
-        }
-    },
-
-    // ==========================================
-    // 3. RECEIVER: OFFLINE ANALYSIS PHASE
-    // ==========================================
-    concatenateChunks: function(chunks) {
-        let total = 0;
-        for (const c of chunks) total += c.length;
-        const result = new Float32Array(total);
-        let offset = 0;
-        for (const c of chunks) { result.set(c, offset); offset += c.length; }
-        return result;
-    },
-
-    // Goertzel algorithm: magnitude of a single target frequency over a
-    // fixed sample window. This is what replaces getByteFrequencyData() -
-    // it can be computed at ANY sample offset after the fact.
-    goertzelMagnitude: function(samples, startIdx, numSamples, targetFreq, sampleRate) {
-        const k = Math.round((numSamples * targetFreq) / sampleRate);
-        const omega = (2 * Math.PI * k) / numSamples;
-        const cosine = Math.cos(omega);
-        const coeff = 2 * cosine;
-
-        let q0 = 0, q1 = 0, q2 = 0;
-        for (let i = 0; i < numSamples; i++) {
-            const sample = samples[startIdx + i] || 0;
-            q0 = coeff * q1 - q2 + sample;
-            q2 = q1;
-            q1 = q0;
-        }
-        const real = q1 - q2 * cosine;
-        const imag = q2 * Math.sin(omega);
-        return Math.sqrt(real * real + imag * imag);
-    },
-
-    analyzeRecording: function(onDataComplete) {
-        const sampleRate = this.audioCtx.sampleRate;
-        const samples = this.concatenateChunks(this.recordedChunks);
-        console.log(`%c[Analysis] Captured ${samples.length} samples (${(samples.length / sampleRate).toFixed(2)}s @ ${sampleRate}Hz). Decoding offline...`, "color:#3b82f6;font-weight:bold;");
-
-        const windowSamples = Math.round(sampleRate * this.BAUD_RATE / 1000);
-        const scanStepSamples = Math.round(sampleRate * 0.002); // 2ms scan resolution
-        const mag = (freq, idx) => this.goertzelMagnitude(samples, idx, windowSamples, freq, sampleRate);
-
-        // --- Locate preamble onset ---
-        let preambleStart = -1;
-        for (let idx = 0; idx + windowSamples < samples.length; idx += scanStepSamples) {
-            const m = mag(this.START_FREQ, idx);
-            console.log(`[Scan] t=${(idx / sampleRate).toFixed(3)}s START(${this.START_FREQ}Hz) mag=${m.toFixed(2)}`);
-            if (m > this.THRESHOLD) { preambleStart = idx; break; }
-        }
-        if (preambleStart === -1) {
-            console.error("[RX] No preamble detected in recording.");
-            if (onDataComplete) onDataComplete(null);
-            return;
-        }
-        console.log(`%c[RX 1/3] Preamble located at t=${(preambleStart / sampleRate).toFixed(3)}s`, "color:#f59e0b;font-weight:bold;");
-
-        // --- Locate preamble end ---
-        let idx = preambleStart;
-        while (idx + windowSamples < samples.length && mag(this.START_FREQ, idx) > this.THRESHOLD) {
-            idx += scanStepSamples;
-        }
-        const preambleEnd = idx;
-        console.log(`%c[RX 2/3] Preamble ends at t=${(preambleEnd / sampleRate).toFixed(3)}s`, "color:#eab308;font-weight:bold;");
-
-        // --- Lock clock: skip transmitter's fixed 350ms gap ---
-        const gapSamples = Math.round(sampleRate * 0.350);
-        let cursor = preambleStart + gapSamples;
-        const frameIntervalSamples = Math.round(sampleRate * (this.BAUD_RATE + this.GUARD_GAP) / 1000);
-
-        console.log(`%c[RX 3/3] CLOCK LOCKED at t=${(cursor / sampleRate).toFixed(3)}s. Decoding payload...`, "color:#3b82f6;font-weight:bold;");
-
-        // --- Decode bits at fixed sample-accurate offsets ---
-        const receivedBits = [];
-        let currentByteBits = [];
-        let expectedLength = Infinity;
-        let byteCount = 0;
-
-        while (cursor + windowSamples < samples.length) {
-            const m0   = mag(this.FREQ_0, cursor);
-            const m1   = mag(this.FREQ_1, cursor);
-            const mEnd = mag(this.END_FREQ, cursor);
-            console.log(`[Bit] t=${(cursor / sampleRate).toFixed(3)}s F0=${m0.toFixed(2)} F1=${m1.toFixed(2)} END=${mEnd.toFixed(2)}`);
-
-            if (mEnd > this.THRESHOLD && mEnd > m0 && mEnd > m1 && receivedBits.length >= 24) {
-                console.log("[RX] End marker detected. Stopping decode.");
-                break;
-            }
-
-            const bit = (m1 > m0) ? 1 : 0;
-            receivedBits.push(bit);
-            currentByteBits.push(bit);
-
-            if (currentByteBits.length === 8) {
-                const byteVal = parseInt(currentByteBits.join(''), 2);
-                byteCount++;
-                console.log(`[RX] Byte ${byteCount}: 0x${byteVal.toString(16).padStart(2, '0').toUpperCase()} (${currentByteBits.join('')})`);
-                currentByteBits = [];
-
-                if (receivedBits.length === 16) {
-                    const headerBytes = this.reconstructBytesFromBits(receivedBits);
-                    expectedLength = (headerBytes[0] << 8) | headerBytes[1];
-                    console.log(`[RX] Header parsed: expecting ${expectedLength} payload bytes.`);
-                }
-            }
-
-            const totalExpectedBits = (2 + expectedLength + 1) * 8;
-            if (expectedLength !== Infinity && receivedBits.length >= totalExpectedBits) break;
-
-            cursor += frameIntervalSamples;
-        }
-
-        this.finishReception(receivedBits, onDataComplete);
-    },
-
-    finishReception: function(receivedBits, onDataComplete) {
-        const rawBytes = this.reconstructBytesFromBits(receivedBits);
-
-        if (rawBytes.length < 3) {
-            console.error("[RX] Packet too short to contain header+checksum.");
-            if (onDataComplete) onDataComplete(null);
-            return;
-        }
-
-        const expectedLength = (rawBytes[0] << 8) | rawBytes[1];
-        const payload = rawBytes.slice(2, 2 + expectedLength);
-        const receivedChecksum = rawBytes[2 + expectedLength];
-
-        let computedChecksum = 0;
-        for (let i = 0; i < payload.length; i++) computedChecksum ^= payload[i];
-
-        if (computedChecksum !== receivedChecksum) {
-            console.error(`%c[RX] CHECKSUM MISMATCH! Expected 0x${receivedChecksum?.toString(16)}, got 0x${computedChecksum.toString(16)}.`, "color:red;font-weight:bold;");
-            if (onDataComplete) onDataComplete(null);
-            return;
-        }
-
-        console.log("%c[RX] SUCCESS! Checksum verified. Payload:", "color:#7ed321;font-weight:bold;font-size:14px;", payload);
-        if (onDataComplete) onDataComplete(payload);
-    },
-
-    reconstructBytesFromBits: function(bits) {
-        const bytes = [];
-        for (let i = 0; i < bits.length; i += 8) {
-            if (i + 8 <= bits.length) {
-                let byte = 0;
-                for (let b = 0; b < 8; b++) byte = (byte << 1) | bits[i + b];
-                bytes.push(byte);
-            }
-        }
-        return new Uint8Array(bytes);
+        if (this.micStream) this.micStream.getTracks().forEach(track => track.stop());
     },
 
     sleep: function(ms) {
         return new Promise(resolve => setTimeout(resolve, ms));
-    },
-
-    transmitTestByte: async function() {
-        if (!this.audioCtx) this.init();
-        const testPayload = new Uint8Array([0xAA, 0xFF, 0x00, 0x55]);
-        console.log("%c[TX] Sending FSK test packet...", "color:#f59e0b;font-weight:bold;");
-        await this.transmitPayload(testPayload);
     }
 };
