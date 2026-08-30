@@ -16,7 +16,7 @@ const AudioPipeline = {
     END_FREQ:   12000,
 
     BAUD_RATE: 45,
-    GUARD_GAP: 35,
+    GUARD_GAP: 55,
 
     // Raw Goertzel magnitude threshold. This is NOT the same scale as
     // AnalyserNode's 0-255 output. Watch the console logs on your first
@@ -26,8 +26,8 @@ const AudioPipeline = {
     LANE_FLOOR: 3,
     LANE_THRESHOLDS: [0.08, 0.08, 0.08, 0.08],
     PREAMBLE_GAP_SEC: 0.45,
-    SYMBOL_ANALYSIS_MS: 30,   // narrower window than BAUD_RATE, avoids the 5ms fade-in/out ramps
-    SYMBOL_OFFSET_MS: 8,      // skip past the fade-in before sampling
+    SYMBOL_ANALYSIS_MS: 25,   // narrower window than BAUD_RATE, avoids the 5ms fade-in/out ramps
+    SYMBOL_OFFSET_MS: 10,      // skip past the fade-in before sampling
 
     RECORD_DURATION_MS: 12000, // max listening window before auto-analyzing
 
@@ -98,6 +98,10 @@ const AudioPipeline = {
             for (let bit = 0; bit < 4; bit++) {
                 if ((nibble >> bit) & 1) activeFreqs.push(this.LANE_FREQS[bit]);
             }
+
+            console.log(
+            `[TX SYMBOL] byte=${i} nibble=${nibble.toString(2).padStart(4, '0')} ` + `freqs=${activeFreqs.join(',') || 'NONE'}`
+            );
             this.scheduleTones(activeFreqs, t, baudSec);
             t += frameInterval;
         }
@@ -136,7 +140,7 @@ scheduleTone: function(frequency, startTime, durationSec) {
 scheduleTones: function(frequencies, startTime, durationSec) {
     if (!frequencies.length) return;
     const masterGain = this.audioCtx.createGain();
-    const peakVolume = 0.85 / Math.sqrt(frequencies.length); // prevent clipping when several tones overlap
+    const peakVolume = 0.22 // prevent clipping when several tones overlap
 
     masterGain.gain.setValueAtTime(0, startTime);
     masterGain.gain.linearRampToValueAtTime(peakVolume, startTime + 0.005);
@@ -268,7 +272,7 @@ scheduleTones: function(frequencies, startTime, durationSec) {
         console.log(`%c[Analysis] Captured ${samples.length} samples (${(samples.length / sampleRate).toFixed(2)}s @ ${sampleRate}Hz). Decoding offline...`, "color:#3b82f6;font-weight:bold;");
 
         const windowSamples = Math.round(sampleRate * this.BAUD_RATE / 1000);
-        const scanStepSamples = Math.round(sampleRate * 0.002); // 10ms scan resolution
+        const scanStepSamples = Math.round(sampleRate * 0.002); // 2ms scan resolution
         const mag = (freq, idx) => this.goertzelMagnitude(samples, idx, windowSamples, freq, sampleRate);
 
         // --- Locate preamble onset ---
