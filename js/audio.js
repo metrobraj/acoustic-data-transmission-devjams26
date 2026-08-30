@@ -18,13 +18,18 @@ const AudioPipeline = {
     END_FREQ:   11500,
 
     BAUD_RATE: 45,
-    GUARD_GAP: 35,
+    GUARD_GAP: 55,
 
     // Raw Goertzel magnitude threshold. This is NOT the same scale as
     // AnalyserNode's 0-255 output. Watch the console logs on your first
     // test run and adjust this to sit clearly above your noise floor
     // and clearly below your tone peaks.
     THRESHOLD: 15,
+    LANE_FLOOR: 3,
+    LANE_THRESHOLDS: [0.08, 0.08, 0.08, 0.08],
+    PREAMBLE_GAP_SEC: 0.45,
+    SYMBOL_ANALYSIS_MS: 25,   // narrower window than BAUD_RATE, avoids the 5ms fade-in/out ramps
+    SYMBOL_OFFSET_MS: 10,      // skip past the fade-in before sampling
 
     RECORD_DURATION_MS: 12000, // max listening window before auto-analyzing
 
@@ -89,9 +94,17 @@ const AudioPipeline = {
     // so no per-bit scheduling error can accumulate.
     for (let i = 0; i < packet.length; i++) {
         const byte = packet[i];
-        for (let bit = 7; bit >= 0; bit--) {
-            const isOne = (byte >> bit) & 1;
-            this.scheduleTone(isOne ? this.FREQ_1 : this.FREQ_0, t, baudSec);
+        for (let nibbleIdx = 1; nibbleIdx >= 0; nibbleIdx--) {
+            const nibble = (byte >> (nibbleIdx * 4)) & 0x0F;
+            const activeFreqs = [];
+            for (let bit = 0; bit < 4; bit++) {
+                if ((nibble >> bit) & 1) activeFreqs.push(this.LANE_FREQS[bit]);
+            }
+
+            console.log(
+            `[TX SYMBOL] byte=${i} nibble=${nibble.toString(2).padStart(4, '0')} ` + `freqs=${activeFreqs.join(',') || 'NONE'}`
+            );
+            this.scheduleTones(activeFreqs, t, baudSec);
             t += frameInterval;
         }
     }
@@ -123,6 +136,28 @@ scheduleTone: function(frequency, startTime, durationSec) {
     osc.connect(masterGain);
     osc.start(startTime);
     osc.stop(startTime + durationSec);
+},
+
+// Schedules MULTIPLE simultaneous tones (one symbol = one nibble = up to 4 tones)
+scheduleTones: function(frequencies, startTime, durationSec) {
+    if (!frequencies.length) return;
+    const masterGain = this.audioCtx.createGain();
+    const peakVolume = 0.22 // prevent clipping when several tones overlap
+
+    masterGain.gain.setValueAtTime(0, startTime);
+    masterGain.gain.linearRampToValueAtTime(peakVolume, startTime + 0.005);
+    masterGain.gain.setValueAtTime(peakVolume, startTime + durationSec - 0.005);
+    masterGain.gain.linearRampToValueAtTime(0, startTime + durationSec);
+    masterGain.connect(this.audioCtx.destination);
+
+    frequencies.forEach(freq => {
+        const osc = this.audioCtx.createOscillator();
+        osc.type = 'sine';
+        osc.frequency.value = freq;
+        osc.connect(masterGain);
+        osc.start(startTime);
+        osc.stop(startTime + durationSec);
+    });
 },
 
     // ==========================================
@@ -220,7 +255,7 @@ scheduleTone: function(frequency, startTime, durationSec) {
         console.log(`%c[Analysis] Captured ${samples.length} samples (${(samples.length / sampleRate).toFixed(2)}s @ ${sampleRate}Hz). Decoding offline...`, "color:#3b82f6;font-weight:bold;");
 
         const windowSamples = Math.round(sampleRate * this.BAUD_RATE / 1000);
-        const scanStepSamples = Math.round(sampleRate * 0.01); // 10ms scan resolution
+        const scanStepSamples = Math.round(sampleRate * 0.002); // 2ms scan resolution
         const mag = (freq, idx) => this.goertzelMagnitude(samples, idx, windowSamples, freq, sampleRate);
 
         // --- Locate preamble onset ---
