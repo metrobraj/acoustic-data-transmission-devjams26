@@ -241,6 +241,27 @@ scheduleTones: function(frequencies, startTime, durationSec) {
         const imag = q2 * Math.sin(omega);
         return Math.sqrt(real * real + imag * imag);
     },
+    // Same as goertzelMagnitude but applies a Hann window first, which
+    // suppresses spectral leakage into neighboring frequency bins.
+    // Use this specifically for closely-spaced parallel data lanes.
+    goertzelMagnitudeWindowed: function(samples, startIdx, numSamples, targetFreq, sampleRate) {
+        const k = Math.round((numSamples * targetFreq) / sampleRate);
+        const omega = (2 * Math.PI * k) / numSamples;
+        const cosine = Math.cos(omega);
+        const coeff = 2 * cosine;
+
+        let q0 = 0, q1 = 0, q2 = 0;
+        for (let i = 0; i < numSamples; i++) {
+            const w = 0.5 - 0.5 * Math.cos((2 * Math.PI * i) / (numSamples - 1)); // Hann taper
+            const sample = (samples[startIdx + i] || 0) * w;
+            q0 = coeff * q1 - q2 + sample;
+            q2 = q1;
+            q1 = q0;
+        }
+        const real = q1 - q2 * cosine;
+        const imag = q2 * Math.sin(omega);
+        return Math.sqrt(real * real + imag * imag);
+    },
 
     analyzeRecording: function(onDataComplete) {
         const sampleRate = this.audioCtx.sampleRate;
@@ -288,7 +309,7 @@ scheduleTones: function(frequencies, startTime, durationSec) {
 
         const symbolWindowSamples = Math.round(sampleRate * this.SYMBOL_ANALYSIS_MS / 1000);
         const symbolOffsetSamples = Math.round(sampleRate * this.SYMBOL_OFFSET_MS / 1000);
-        const symbolMag = (freq, idx) => this.goertzelMagnitude(samples, idx + symbolOffsetSamples, symbolWindowSamples, freq, sampleRate);
+        const symbolMag = (freq, idx) => this.goertzelMagnitudeWindowed(samples, idx + symbolOffsetSamples, symbolWindowSamples, freq, sampleRate);
 
         while (cursor + windowSamples < samples.length) {
             const laneMags = this.LANE_FREQS.map(f => mag(f, cursor));
