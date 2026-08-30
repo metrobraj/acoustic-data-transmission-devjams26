@@ -112,8 +112,19 @@ const AudioPipeline = {
 
                 const inputData = evt.inputBuffer.getChannelData(0);
                 
+                // 1. Convert PCM Float32 frame into Int8 array for C++ decoder FIRST
+                const pcmInt8 = new Int8Array(inputData.length * 2);
+                for (let i = 0; i < inputData.length; i++) {
+                    const s = Math.max(-1, Math.min(1, inputData[i]));
+                    const val = s < 0 ? s * 0x8000 : s * 0x7FFF;
+                    pcmInt8[i * 2] = val & 0xFF;
+                    pcmInt8[i * 2 + 1] = (val >> 8) & 0xFF;
+                }
+
+                // 2. Decode audio frames through WebAssembly AFTER pcmInt8 is ready
                 const res = this.ggwave.decode(this.ggwaveInstance, pcmInt8);
                 
+                // 3. Process the decoded result
                 if (res && res.length > 0) {
                     console.log("[RX] Verified packet received via ggwave!");
                     
@@ -128,29 +139,10 @@ const AudioPipeline = {
                         uint8Data = new Uint8Array(res);
                     }
 
+                    console.log("[RX] Payload decoded and verified!");
                     this.stopReceiver();
                     processor.disconnect();
                     if (onDataComplete) onDataComplete(uint8Data);
-                }
-
-                // Convert PCM Float32 frame into Int8 array for C++ decoder
-                const pcmInt8 = new Int8Array(inputData.length * 2);
-                for (let i = 0; i < inputData.length; i++) {
-                    const s = Math.max(-1, Math.min(1, inputData[i]));
-                    const val = s < 0 ? s * 0x8000 : s * 0x7FFF;
-                    pcmInt8[i * 2] = val & 0xFF;
-                    pcmInt8[i * 2 + 1] = (val >> 8) & 0xFF;
-                }
-
-                // Decode audio frames through WebAssembly
-                
-                
-                // Trigger callback only when payload passes 16-bit CRC check
-                if (res && res.length > 0) {
-                    console.log("[RX] Payload decoded and verified via CRC!");
-                    this.stopReceiver();
-                    processor.disconnect();
-                    if (onDataComplete) onDataComplete(res);
                 }
             };
         } catch (err) {
