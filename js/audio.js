@@ -1,4 +1,4 @@
-// js/audio.js - Simple FSK Acoustic Modem
+// js/audio.js - Simple FSK Acoustic Modem (Direct Clock-Lock)
 
 const AudioPipeline = {
     audioCtx: null,
@@ -10,19 +10,18 @@ const AudioPipeline = {
     // ----------------------------------------------------
     // FSK FREQUENCY ALLOCATION
     // ----------------------------------------------------
-    FREQ_0: 15000,     // Frequency for bit = 0
+    FREQ_0: 17000,     // Frequency for bit = 0
     FREQ_1: 18000,     // Frequency for bit = 1
     
-    START_FREQ: 17000, // Wake up receiver
-    SYNC_FREQ:  19000, // Sharp edge to lock receiver clock
+    START_FREQ: 15000, // Wake up receiver & lock clock instantly
     END_FREQ:   16000, // Transmission complete
 
     // ----------------------------------------------------
     // TIMING CONSTRAINTS
     // ----------------------------------------------------
-    BAUD_RATE: 100,     // Duration of each tone pulse (ms)
-    GUARD_GAP: 350,     // Dead-air between pulses to stop echo overlap (ms)
-    THRESHOLD: 80,     // Absolute amplitude required for markers/sync
+    BAUD_RATE: 45,     // Duration of each tone pulse (ms)
+    GUARD_GAP: 35,     // Dead-air between pulses to stop echo overlap (ms)
+    THRESHOLD: 30,     // Absolute amplitude required for markers/sync
 
     init: function() {
         if (!this.audioCtx) {
@@ -86,22 +85,16 @@ const AudioPipeline = {
         console.log(`[TX] Packet created: length=${length}B, checksum=0x${checksum.toString(16).toUpperCase()}`);
         console.log(`[TX] Initiating FSK transmission for ${packet.length} total bytes...`);
 
-        // 1. PREAMBLE WAKEUP
+        // 1. PREAMBLE WAKEUP (Instantly locks clock on drop)
         this.playTone(this.START_FREQ, 300);
         await this.sleep(350); 
 
-        // 2. SYNC PULSE (Locks the receiver clock)
-        console.log("[TX] Sending Sync Pulse...");
-        this.playTone(this.SYNC_FREQ, this.BAUD_RATE); 
-        await this.sleep(this.BAUD_RATE + this.GUARD_GAP);
-
-        // 3. FSK PAYLOAD DATA (Serial Bit-by-Bit)
+        // 2. FSK PAYLOAD DATA (Serial Bit-by-Bit immediately after preamble)
         console.log("[TX] Streaming payload...");
         for (let i = 0; i < packet.length; i++) {
             const byte = packet[i];
-            console.log(`[TX] Transferring Byte ${i + 1}/${packet.length}: 0x${byte.toString(16).padStart(2, '0').toUpperCase()} (Bin: ${byte.toString(2).padStart(8, '0')})`);
+            console.log(`[TX] ➔ Transmitting Byte ${i + 1}/${packet.length} | Hex: 0x${byte.toString(16).padStart(2, '0').toUpperCase()} | Bin: ${byte.toString(2).padStart(8, '0')}`);
             
-            // Loop through all 8 bits (MSB first)
             for (let bit = 7; bit >= 0; bit--) {
                 const isOne = (byte >> bit) & 1;
                 const activeFreq = isOne ? this.FREQ_1 : this.FREQ_0;
@@ -111,7 +104,7 @@ const AudioPipeline = {
             }
         }
 
-        // 4. END MARKER
+        // 3. END MARKER
         await this.sleep(100);
         this.playTone(this.END_FREQ, 300);
         console.log("[TX] Transmission complete.");
@@ -150,9 +143,10 @@ const AudioPipeline = {
 
         let state = 'IDLE'; 
         let receivedBits = [];
+        let currentByteBits = [];
         let lastBitTime = 0;
         let expectedLength = Infinity;
-        let currentByteBits = [];
+        let lastSignalTime = Date.now(); 
 
         const pollAudio = () => {
             if (!this.isListening) return;
@@ -172,83 +166,58 @@ const AudioPipeline = {
             };
 
             const startMag = getPeak(this.START_FREQ);
-            const syncMag  = getPeak(this.SYNC_FREQ);
             const endMag   = getPeak(this.END_FREQ);
             const mag0     = getPeak(this.FREQ_0);
             const mag1     = getPeak(this.FREQ_1);
 
             const now = Date.now();
 
-            // NEW: Reset the silence timer if ANY of our modem frequencies are loud enough
-            if (startMag > this.THRESHOLD || syncMag > this.THRESHOLD || endMag > this.THRESHOLD || mag0 > this.THRESHOLD || mag1 > this.THRESHOLD) {
+            if (startMag > this.THRESHOLD || endMag > this.THRESHOLD || mag0 > this.THRESHOLD || mag1 > this.THRESHOLD) {
                 lastSignalTime = now;
             }
 
-            // NEW: If we are recording but haven't heard a tone in 600ms, force quit.
             if (state === 'RECORDING' && (now - lastSignalTime > 600)) {
                 console.warn("[RX] Silence timeout! Transmitter stopped. Forcing completion.");
                 this.finishReception(receivedBits, onDataComplete);
                 return;
             }
 
-            // STATE 1: IDLE
-            // ... (rest of your existing state logic remains unchanged)
-
-            // STATE 1: IDLE
+            // STATE 1: IDLE -> Instantly jumps to RECORDING on Start Tone
             if (state === 'IDLE') {
                 if (startMag > this.THRESHOLD) {
-                    state = 'AWAIT_CLEARANCE';
+                    state = 'RECORDING';
                     receivedBits = [];
                     currentByteBits = [];
-                    console.log("%c[RX 1/4] Preamble Detected.", "color: #f59e0b; font-weight: bold;");
+                    lastBitTime = now + 350; // Offset past the preamble tail directly into the first bit
+                    console.log("%c[RX] Preamble Detected. Clock Locked, Recording Payload...", "color: #3b82f6; font-weight: bold;");
                 }
             }
-
-            // STATE 2: AWAIT_CLEARANCE
-            else if (state === 'AWAIT_CLEARANCE') {
-                if (startMag < this.THRESHOLD - 10) {
-                    state = 'AWAIT_SYNC';
-                    console.log("%c[RX 2/4] Awaiting Sync Pulse...", "color: #eab308; font-weight: bold;");
-                }
-            }
-
-            // STATE 3: AWAIT_SYNC
-            else if (state === 'AWAIT_SYNC') {
-                if (syncMag > this.THRESHOLD) {
-                    state = 'RECORDING';
-                    lastBitTime = Date.now(); 
-                    console.log("%c[RX 3/4] CLOCK LOCKED! Sync Pulse verified.", "color: #3b82f6; font-weight: bold;");
-                }
-            }
-
-            // STATE 4: RECORDING (FSK Comparison)
+            // STATE 2: RECORDING (FSK Comparison)
             else if (state === 'RECORDING') {
-                const now = Date.now();
                 const frameInterval = this.BAUD_RATE + this.GUARD_GAP;
 
                 if (now - lastBitTime >= frameInterval) {
-                    // Compare the 17kHz and 18kHz bins. The louder bin dictates the bit.
                     const bit = (mag1 > mag0) ? 1 : 0;
                     
                     receivedBits.push(bit);
                     currentByteBits.push(bit);
                     lastBitTime = now;
 
-                    // Log byte progress
                     if (currentByteBits.length === 8) {
                         const byteVal = parseInt(currentByteBits.join(''), 2);
-                        console.log(`[RX] Received Byte ${receivedBits.length / 8}: 0x${byteVal.toString(16).padStart(2, '0').toUpperCase()} (Bin: ${currentByteBits.join('')})`);
+                        const byteNumber = receivedBits.length / 8;
+                        
+                        console.log(`[RX] ⬅ Captured Byte ${byteNumber} | Hex: 0x${byteVal.toString(16).padStart(2, '0').toUpperCase()} | Bin: ${currentByteBits.join('')}`);
+                        
                         currentByteBits = [];
 
-                        // Parse length from first two bytes
                         if (receivedBits.length === 16) {
                             const rawBytes = this.reconstructBytesFromBits(receivedBits);
                             expectedLength = (rawBytes[0] << 8) | rawBytes[1];
-                            console.log(`[RX] Packet length parsed: Expecting ${expectedLength} payload bytes.`);
+                            console.log(`[RX] Header parsed: Expecting ${expectedLength} payload bytes.`);
                         }
                     }
 
-                    // Stop if we hit target bits (Header + Payload + Checksum)
                     const totalExpectedBits = (2 + expectedLength + 1) * 8;
                     if (receivedBits.length >= totalExpectedBits && expectedLength !== Infinity) {
                         this.finishReception(receivedBits, onDataComplete);
@@ -256,7 +225,6 @@ const AudioPipeline = {
                     }
                 }
 
-                // Fallback End Marker Trigger
                 if (endMag > this.THRESHOLD && receivedBits.length >= 24) {
                     console.log("[RX] End marker detected.");
                     this.finishReception(receivedBits, onDataComplete);
@@ -295,7 +263,7 @@ const AudioPipeline = {
             return;
         }
 
-        console.log("%c[RX 4/4] SUCCESS! Checksum verified. Payload Reconstructed:", "color: #7ed321; font-weight: bold; font-size: 14px;", payload);
+        console.log("%c[RX] SUCCESS! Checksum verified. Payload Reconstructed:", "color: #7ed321; font-weight: bold; font-size: 14px;", payload);
         if (onDataComplete) onDataComplete(payload);
     },
 
@@ -304,7 +272,7 @@ const AudioPipeline = {
         for (let i = 0; i < bits.length; i += 8) {
             if (i + 8 <= bits.length) {
                 let byte = 0;
-                for (let b = 0; b < 8; b++) byte = (byte << 1) | bits[i + b]; // MSB first
+                for (let b = 0; b < 8; b++) byte = (byte << 1) | bits[i + b];
                 bytes.push(byte);
             }
         }
@@ -327,14 +295,10 @@ const AudioPipeline = {
         return new Promise(resolve => setTimeout(resolve, ms));
     },
 
-    // TEST HARNESS
     transmitTestByte: async function() {
         if (!this.audioCtx) this.init();
-        
-        // Tests the alternating pattern (10101010), high (11111111), and low (00000000) limits
         const testPayload = new Uint8Array([0xAA, 0xFF, 0x00, 0x55]);
         console.log("%c[TX] Sending FSK test packet [0xAA, 0xFF, 0x00, 0x55]...", "color: #f59e0b; font-weight: bold;");
-        
         await this.transmitPayload(testPayload);
     }
 };
