@@ -24,7 +24,7 @@ const AudioPipeline = {
     // and clearly below your tone peaks.
     THRESHOLD: 15,
     LANE_FLOOR: 3,
-    LANE_THRESHOLDS: [0.15, 0.15, 0.15, 0.15],
+    LANE_THRESHOLDS: [0.08, 0.08, 0.08, 0.08],
     PREAMBLE_GAP_SEC: 0.45,
     SYMBOL_ANALYSIS_MS: 30,   // narrower window than BAUD_RATE, avoids the 5ms fade-in/out ramps
     SYMBOL_OFFSET_MS: 8,      // skip past the fade-in before sampling
