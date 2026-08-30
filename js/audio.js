@@ -82,7 +82,7 @@ const AudioPipeline = {
 
     // Preamble
     this.scheduleTone(this.START_FREQ, t, 0.3);
-    t += 0.35;
+    t += 0.45;
 
     // Payload — 4 bits (one nibble) per symbol, scheduled from a single
     // fixed origin so no per-symbol timing error can accumulate.
