@@ -12,7 +12,7 @@ const AudioPipeline = {
     // LOW-BAND FSK ALLOCATION (8-12kHz)
     // ----------------------------------------------------
     START_FREQ: 8000,
-    LANE_FREQS: [8800, 9600, 10400, 11200],
+    LANE_FREQS: [8700, 9500, 10450, 11300],
     END_FREQ:   12000,
 
     BAUD_RATE: 45,
@@ -135,7 +135,7 @@ scheduleTone: function(frequency, startTime, durationSec) {
 scheduleTones: function(frequencies, startTime, durationSec) {
     if (!frequencies.length) return;
     const masterGain = this.audioCtx.createGain();
-    const peakVolume = 0.9 / Math.sqrt(frequencies.length); // prevent clipping when several tones overlap
+    const peakVolume = 0.6 / Math.sqrt(frequencies.length); // prevent clipping when several tones overlap
 
     masterGain.gain.setValueAtTime(0, startTime);
     masterGain.gain.linearRampToValueAtTime(peakVolume, startTime + 0.005);
