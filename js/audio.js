@@ -24,6 +24,7 @@ const AudioPipeline = {
     // and clearly below your tone peaks.
     THRESHOLD: 15,
     LANE_FLOOR: 3,
+    PREAMBLE_GAP_SEC: 0.45,
 
     RECORD_DURATION_MS: 12000, // max listening window before auto-analyzing
 
@@ -82,7 +83,7 @@ const AudioPipeline = {
 
     // Preamble
     this.scheduleTone(this.START_FREQ, t, 0.3);
-    t += 0.45;
+    t += this.PREAMBLE_GAP_SEC;
 
     // Payload — 4 bits (one nibble) per symbol, scheduled from a single
     // fixed origin so no per-symbol timing error can accumulate.
@@ -271,7 +272,7 @@ scheduleTones: function(frequencies, startTime, durationSec) {
         console.log(`%c[RX 2/3] Preamble ends at t=${(preambleEnd / sampleRate).toFixed(3)}s`, "color:#eab308;font-weight:bold;");
 
         // --- Lock clock: skip transmitter's fixed 350ms gap ---
-        const gapSamples = Math.round(sampleRate * 0.350);
+        const gapSamples = Math.round(sampleRate * this.PREAMBLE_GAP_SEC);
         let cursor = preambleStart + gapSamples;
         const frameIntervalSamples = Math.round(sampleRate * (this.BAUD_RATE + this.GUARD_GAP) / 1000);
 
