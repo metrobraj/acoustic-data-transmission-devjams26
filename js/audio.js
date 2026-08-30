@@ -12,7 +12,7 @@ const AudioPipeline = {
     // LOW-BAND FSK ALLOCATION (8-12kHz)
     // ----------------------------------------------------
     START_FREQ: 8000,
-    LANE_FREQS: [8700, 9500, 10450, 11300],
+    LANE_FREQS: [8300, 9500, 10700, 11700],
     END_FREQ:   12000,
 
     BAUD_RATE: 45,
@@ -322,7 +322,7 @@ scheduleTones: function(frequencies, startTime, durationSec) {
             }
 
             const maxLanePeak = Math.max(...laneMags);
-            const dynamicCutoff = Math.max(this.LANE_FLOOR, maxLanePeak * 0.6);
+            const dynamicCutoff = Math.max(this.LANE_FLOOR, maxLanePeak * 0.75);
             const nibbleBits = laneMags.map(m => m >= dynamicCutoff ? 1 : 0);
 
             // Push MSB -> LSB (Lane 3 -> Lane 0), same order transmitter used
