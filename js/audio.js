@@ -312,8 +312,8 @@ scheduleTones: function(frequencies, startTime, durationSec) {
         const symbolMag = (freq, idx) => this.goertzelMagnitudeWindowed(samples, idx + symbolOffsetSamples, symbolWindowSamples, freq, sampleRate);
 
         while (cursor + windowSamples < samples.length) {
-            const laneMags = this.LANE_FREQS.map(f => mag(f, cursor));
-            const mEnd = mag(this.END_FREQ, cursor);
+            const laneMags = this.LANE_FREQS.map(f => symbolMag(f, cursor));
+            const mEnd = symbolMag(this.END_FREQ, cursor);
             console.log(`[Symbol] t=${(cursor / sampleRate).toFixed(3)}s lanes=[${laneMags.map(m => m.toFixed(2)).join(', ')}] END=${mEnd.toFixed(2)}`);
 
             if (mEnd > this.THRESHOLD && mEnd > Math.max(...laneMags) && receivedBits.length >= 24) {
