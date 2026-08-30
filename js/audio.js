@@ -24,6 +24,7 @@ const AudioPipeline = {
     // and clearly below your tone peaks.
     THRESHOLD: 15,
     LANE_FLOOR: 3,
+    LANE_THRESHOLDS: [8, 8, 8, 8],
     PREAMBLE_GAP_SEC: 0.45,
     SYMBOL_ANALYSIS_MS: 30,   // narrower window than BAUD_RATE, avoids the 5ms fade-in/out ramps
     SYMBOL_OFFSET_MS: 8,      // skip past the fade-in before sampling
@@ -135,7 +136,7 @@ scheduleTone: function(frequency, startTime, durationSec) {
 scheduleTones: function(frequencies, startTime, durationSec) {
     if (!frequencies.length) return;
     const masterGain = this.audioCtx.createGain();
-    const peakVolume = 0.6 / Math.sqrt(frequencies.length); // prevent clipping when several tones overlap
+    const peakVolume = 0.85 / Math.sqrt(frequencies.length); // prevent clipping when several tones overlap
 
     masterGain.gain.setValueAtTime(0, startTime);
     masterGain.gain.linearRampToValueAtTime(peakVolume, startTime + 0.005);
@@ -225,8 +226,7 @@ scheduleTones: function(frequencies, startTime, durationSec) {
     // fixed sample window. This is what replaces getByteFrequencyData() -
     // it can be computed at ANY sample offset after the fact.
     goertzelMagnitude: function(samples, startIdx, numSamples, targetFreq, sampleRate) {
-        const k = Math.round((numSamples * targetFreq) / sampleRate);
-        const omega = (2 * Math.PI * k) / numSamples;
+        const omega = (2 * Math.PI * targetFreq) / sampleRate;
         const cosine = Math.cos(omega);
         const coeff = 2 * cosine;
 
@@ -269,7 +269,7 @@ scheduleTones: function(frequencies, startTime, durationSec) {
         console.log(`%c[Analysis] Captured ${samples.length} samples (${(samples.length / sampleRate).toFixed(2)}s @ ${sampleRate}Hz). Decoding offline...`, "color:#3b82f6;font-weight:bold;");
 
         const windowSamples = Math.round(sampleRate * this.BAUD_RATE / 1000);
-        const scanStepSamples = Math.round(sampleRate * 0.01); // 10ms scan resolution
+        const scanStepSamples = Math.round(sampleRate * 0.002); // 10ms scan resolution
         const mag = (freq, idx) => this.goertzelMagnitude(samples, idx, windowSamples, freq, sampleRate);
 
         // --- Locate preamble onset ---
@@ -295,6 +295,7 @@ scheduleTones: function(frequencies, startTime, durationSec) {
         console.log(`%c[RX 2/3] Preamble ends at t=${(preambleEnd / sampleRate).toFixed(3)}s`, "color:#eab308;font-weight:bold;");
 
         // --- Lock clock: skip transmitter's fixed 350ms gap ---
+        // TX: 300ms preamble followed by fixed 450ms offset to first payload symbol.
         const gapSamples = Math.round(sampleRate * this.PREAMBLE_GAP_SEC);
         let cursor = preambleStart + gapSamples;
         const frameIntervalSamples = Math.round(sampleRate * (this.BAUD_RATE + this.GUARD_GAP) / 1000);
@@ -321,9 +322,14 @@ scheduleTones: function(frequencies, startTime, durationSec) {
                 break;
             }
 
-            const maxLanePeak = Math.max(...laneMags);
-            const dynamicCutoff = Math.max(this.LANE_FLOOR, maxLanePeak * 0.75);
-            const nibbleBits = laneMags.map(m => m >= dynamicCutoff ? 1 : 0);
+            // Independent threshold per lane.
+            // Do NOT compare lanes against the strongest lane.
+            // A 0000 symbol is valid and contains only noise.
+            const laneThresholds = this.LANE_THRESHOLDS || [8, 8, 8, 8];
+
+            const nibbleBits = laneMags.map((m, i) => {
+                return m >= laneThresholds[i] ? 1 : 0;
+            });
 
             // Push MSB -> LSB (Lane 3 -> Lane 0), same order transmitter used
             receivedBits.push(nibbleBits[3], nibbleBits[2], nibbleBits[1], nibbleBits[0]);
