@@ -25,6 +25,8 @@ const AudioPipeline = {
     THRESHOLD: 15,
     LANE_FLOOR: 3,
     PREAMBLE_GAP_SEC: 0.45,
+    SYMBOL_ANALYSIS_MS: 30,   // narrower window than BAUD_RATE, avoids the 5ms fade-in/out ramps
+    SYMBOL_OFFSET_MS: 8,      // skip past the fade-in before sampling
 
     RECORD_DURATION_MS: 12000, // max listening window before auto-analyzing
 
@@ -133,7 +135,7 @@ scheduleTone: function(frequency, startTime, durationSec) {
 scheduleTones: function(frequencies, startTime, durationSec) {
     if (!frequencies.length) return;
     const masterGain = this.audioCtx.createGain();
-    const peakVolume = 0.9 / frequencies.length; // prevent clipping when several tones overlap
+    const peakVolume = 0.9 / Math.sqrt(frequencies.length); // prevent clipping when several tones overlap
 
     masterGain.gain.setValueAtTime(0, startTime);
     masterGain.gain.linearRampToValueAtTime(peakVolume, startTime + 0.005);
@@ -283,6 +285,10 @@ scheduleTones: function(frequencies, startTime, durationSec) {
         let currentByteBits = [];
         let expectedLength = Infinity;
         let byteCount = 0;
+
+        const symbolWindowSamples = Math.round(sampleRate * this.SYMBOL_ANALYSIS_MS / 1000);
+        const symbolOffsetSamples = Math.round(sampleRate * this.SYMBOL_OFFSET_MS / 1000);
+        const symbolMag = (freq, idx) => this.goertzelMagnitude(samples, idx + symbolOffsetSamples, symbolWindowSamples, freq, sampleRate);
 
         while (cursor + windowSamples < samples.length) {
             const laneMags = this.LANE_FREQS.map(f => mag(f, cursor));
