@@ -1,4 +1,5 @@
 // js/audio.js - Batch-Analyzed FSK Acoustic Modem (no real-time polling)
+//THIS VERSION OF MAIN WORKS FOR SINGLE LANE TRANSFER.
 
 const AudioPipeline = {
     audioCtx: null,
