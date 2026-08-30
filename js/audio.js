@@ -12,9 +12,8 @@ const AudioPipeline = {
     // LOW-BAND FSK ALLOCATION (8-12kHz)
     // ----------------------------------------------------
     START_FREQ: 8000,
-    FREQ_0:     9000,
-    FREQ_1:     10000,
-    END_FREQ:   11500,
+    LANE_FREQS: [8800, 9600, 10400, 11200],
+    END_FREQ:   12000,
 
     BAUD_RATE: 45,
     GUARD_GAP: 35,
@@ -60,45 +59,95 @@ const AudioPipeline = {
     },
 
     transmitPayload: async function(payloadBytes) {
-        if (!this.audioCtx) this.init();
+    if (!this.audioCtx) this.init();
 
-        // --- PACKET ASSEMBLY: [len_hi][len_lo][...payloadBytes...][checksum] ---
-        const length = payloadBytes.length;
-        const lengthHigh = (length >> 8) & 0xFF;
-        const lengthLow  = length & 0xFF;
+    const length = payloadBytes.length;
+    const lengthHigh = (length >> 8) & 0xFF;
+    const lengthLow  = length & 0xFF;
+    let checksum = 0;
+    for (let i = 0; i < payloadBytes.length; i++) checksum ^= payloadBytes[i];
 
-        let checksum = 0;
-        for (let i = 0; i < payloadBytes.length; i++) checksum ^= payloadBytes[i];
+    const packet = new Uint8Array(payloadBytes.length + 3);
+    packet[0] = lengthHigh;
+    packet[1] = lengthLow;
+    packet.set(payloadBytes, 2);
+    packet[packet.length - 1] = checksum;
 
-        const packet = new Uint8Array(payloadBytes.length + 3);
-        packet[0] = lengthHigh;
-        packet[1] = lengthLow;
-        packet.set(payloadBytes, 2);
-        packet[packet.length - 1] = checksum;
+    console.log(`[TX] Packet created: length=${length}B, checksum=0x${checksum.toString(16).toUpperCase()}`);
 
-        console.log(`[TX] Packet created: length=${length}B, checksum=0x${checksum.toString(16).toUpperCase()}`);
+    const frameInterval = (this.BAUD_RATE + this.GUARD_GAP) / 1000; // seconds
+    const baudSec = this.BAUD_RATE / 1000;
+    let t = this.audioCtx.currentTime + 0.1; // small safety lead-in
 
-        // 1. PREAMBLE WAKEUP
-        this.playTone(this.START_FREQ, 300);
-        await this.sleep(350);
+    // Preamble
+    this.scheduleTone(this.START_FREQ, t, 0.3);
+    t += 0.35;
 
-        // 2. PAYLOAD DATA (Serial Bit-by-Bit)
-        for (let i = 0; i < packet.length; i++) {
-            const byte = packet[i];
-            console.log(`[TX] Byte ${i + 1}/${packet.length}: 0x${byte.toString(16).padStart(2, '0').toUpperCase()} (${byte.toString(2).padStart(8, '0')})`);
-
-            for (let bit = 7; bit >= 0; bit--) {
-                const isOne = (byte >> bit) & 1;
-                this.playTone(isOne ? this.FREQ_1 : this.FREQ_0, this.BAUD_RATE);
-                await this.sleep(this.BAUD_RATE + this.GUARD_GAP);
+    // Payload — 4 bits (one nibble) per symbol, scheduled from a single
+    // fixed origin so no per-symbol timing error can accumulate.
+    for (let i = 0; i < packet.length; i++) {
+        const byte = packet[i];
+        for (let nibbleIdx = 1; nibbleIdx >= 0; nibbleIdx--) {
+            const nibble = (byte >> (nibbleIdx * 4)) & 0x0F;
+            const activeFreqs = [];
+            for (let bit = 0; bit < 4; bit++) {
+                if ((nibble >> bit) & 1) activeFreqs.push(this.LANE_FREQS[bit]);
             }
+            this.scheduleTones(activeFreqs, t, baudSec);
+            t += frameInterval;
         }
+    }
 
-        // 3. END MARKER
-        await this.sleep(100);
-        this.playTone(this.END_FREQ, 300);
-        console.log("[TX] Transmission complete.");
-    },
+    // End marker
+    t += 0.1;
+    this.scheduleTone(this.END_FREQ, t, 0.3);
+    const totalDurationMs = (t + 0.3 - this.audioCtx.currentTime) * 1000;
+
+    console.log(`[TX] All ${packet.length} bytes scheduled on audio clock. Total duration ~${(totalDurationMs/1000).toFixed(2)}s`);
+    await this.sleep(totalDurationMs); // just for the UI/button state, not for pacing
+    console.log("[TX] Transmission complete.");
+},
+
+// Same as playTone but takes an explicit start time instead of "now"
+scheduleTone: function(frequency, startTime, durationSec) {
+    const masterGain = this.audioCtx.createGain();
+    const peakVolume = 0.9;
+
+    masterGain.gain.setValueAtTime(0, startTime);
+    masterGain.gain.linearRampToValueAtTime(peakVolume, startTime + 0.005);
+    masterGain.gain.setValueAtTime(peakVolume, startTime + durationSec - 0.005);
+    masterGain.gain.linearRampToValueAtTime(0, startTime + durationSec);
+    masterGain.connect(this.audioCtx.destination);
+
+    const osc = this.audioCtx.createOscillator();
+    osc.type = 'sine';
+    osc.frequency.value = frequency;
+    osc.connect(masterGain);
+    osc.start(startTime);
+    osc.stop(startTime + durationSec);
+},
+
+// Schedules MULTIPLE simultaneous tones (one symbol = one nibble = up to 4 tones)
+scheduleTones: function(frequencies, startTime, durationSec) {
+    if (!frequencies.length) return;
+    const masterGain = this.audioCtx.createGain();
+    const peakVolume = 0.9 / frequencies.length; // prevent clipping when several tones overlap
+
+    masterGain.gain.setValueAtTime(0, startTime);
+    masterGain.gain.linearRampToValueAtTime(peakVolume, startTime + 0.005);
+    masterGain.gain.setValueAtTime(peakVolume, startTime + durationSec - 0.005);
+    masterGain.gain.linearRampToValueAtTime(0, startTime + durationSec);
+    masterGain.connect(this.audioCtx.destination);
+
+    frequencies.forEach(freq => {
+        const osc = this.audioCtx.createOscillator();
+        osc.type = 'sine';
+        osc.frequency.value = freq;
+        osc.connect(masterGain);
+        osc.start(startTime);
+        osc.stop(startTime + durationSec);
+    });
+},
 
     // ==========================================
     // 2. RECEIVER: COLLECTION PHASE (no analysis)
@@ -222,7 +271,7 @@ const AudioPipeline = {
 
         // --- Lock clock: skip transmitter's fixed 350ms gap ---
         const gapSamples = Math.round(sampleRate * 0.350);
-        let cursor = preambleEnd + gapSamples;
+        let cursor = preambleStart + gapSamples;
         const frameIntervalSamples = Math.round(sampleRate * (this.BAUD_RATE + this.GUARD_GAP) / 1000);
 
         console.log(`%c[RX 3/3] CLOCK LOCKED at t=${(cursor / sampleRate).toFixed(3)}s. Decoding payload...`, "color:#3b82f6;font-weight:bold;");
@@ -234,19 +283,22 @@ const AudioPipeline = {
         let byteCount = 0;
 
         while (cursor + windowSamples < samples.length) {
-            const m0   = mag(this.FREQ_0, cursor);
-            const m1   = mag(this.FREQ_1, cursor);
+            const laneMags = this.LANE_FREQS.map(f => mag(f, cursor));
             const mEnd = mag(this.END_FREQ, cursor);
-            console.log(`[Bit] t=${(cursor / sampleRate).toFixed(3)}s F0=${m0.toFixed(2)} F1=${m1.toFixed(2)} END=${mEnd.toFixed(2)}`);
+            console.log(`[Symbol] t=${(cursor / sampleRate).toFixed(3)}s lanes=[${laneMags.map(m => m.toFixed(2)).join(', ')}] END=${mEnd.toFixed(2)}`);
 
-            if (mEnd > this.THRESHOLD && mEnd > m0 && mEnd > m1 && receivedBits.length >= 24) {
+            if (mEnd > this.THRESHOLD && mEnd > Math.max(...laneMags) && receivedBits.length >= 24) {
                 console.log("[RX] End marker detected. Stopping decode.");
                 break;
             }
 
-            const bit = (m1 > m0) ? 1 : 0;
-            receivedBits.push(bit);
-            currentByteBits.push(bit);
+            const maxLanePeak = Math.max(...laneMags);
+            const dynamicCutoff = Math.max(this.THRESHOLD, maxLanePeak * 0.6);
+            const nibbleBits = laneMags.map(m => m >= dynamicCutoff ? 1 : 0);
+
+            // Push MSB -> LSB (Lane 3 -> Lane 0), same order transmitter used
+            receivedBits.push(nibbleBits[3], nibbleBits[2], nibbleBits[1], nibbleBits[0]);
+            currentByteBits.push(nibbleBits[3], nibbleBits[2], nibbleBits[1], nibbleBits[0]);
 
             if (currentByteBits.length === 8) {
                 const byteVal = parseInt(currentByteBits.join(''), 2);
