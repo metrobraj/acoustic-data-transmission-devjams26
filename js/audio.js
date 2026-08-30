@@ -23,6 +23,7 @@ const AudioPipeline = {
     // test run and adjust this to sit clearly above your noise floor
     // and clearly below your tone peaks.
     THRESHOLD: 15,
+    LANE_FLOOR: 3,
 
     RECORD_DURATION_MS: 12000, // max listening window before auto-analyzing
 
@@ -293,7 +294,7 @@ scheduleTones: function(frequencies, startTime, durationSec) {
             }
 
             const maxLanePeak = Math.max(...laneMags);
-            const dynamicCutoff = Math.max(this.THRESHOLD, maxLanePeak * 0.6);
+            const dynamicCutoff = Math.max(this.LANE_FLOOR, maxLanePeak * 0.6);
             const nibbleBits = laneMags.map(m => m >= dynamicCutoff ? 1 : 0);
 
             // Push MSB -> LSB (Lane 3 -> Lane 0), same order transmitter used
