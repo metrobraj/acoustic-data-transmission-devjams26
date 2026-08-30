@@ -12,9 +12,8 @@ const AudioPipeline = {
     // LOW-BAND FSK ALLOCATION (8-12kHz)
     // ----------------------------------------------------
     START_FREQ: 8000,
-    FREQ_0:     9000,
-    FREQ_1:     10000,
-    END_FREQ:   11500,
+    LANE_FREQS: [8800, 9600, 10400, 11200],
+    END_FREQ:   12000,
 
     BAUD_RATE: 45,
     GUARD_GAP: 35,
@@ -84,13 +83,17 @@ const AudioPipeline = {
     this.scheduleTone(this.START_FREQ, t, 0.3);
     t += 0.35;
 
-    // Payload — every bit's start time computed from a single fixed origin,
-    // so no per-bit scheduling error can accumulate.
+    // Payload — 4 bits (one nibble) per symbol, scheduled from a single
+    // fixed origin so no per-symbol timing error can accumulate.
     for (let i = 0; i < packet.length; i++) {
         const byte = packet[i];
-        for (let bit = 7; bit >= 0; bit--) {
-            const isOne = (byte >> bit) & 1;
-            this.scheduleTone(isOne ? this.FREQ_1 : this.FREQ_0, t, baudSec);
+        for (let nibbleIdx = 1; nibbleIdx >= 0; nibbleIdx--) {
+            const nibble = (byte >> (nibbleIdx * 4)) & 0x0F;
+            const activeFreqs = [];
+            for (let bit = 0; bit < 4; bit++) {
+                if ((nibble >> bit) & 1) activeFreqs.push(this.LANE_FREQS[bit]);
+            }
+            this.scheduleTones(activeFreqs, t, baudSec);
             t += frameInterval;
         }
     }
@@ -122,6 +125,28 @@ scheduleTone: function(frequency, startTime, durationSec) {
     osc.connect(masterGain);
     osc.start(startTime);
     osc.stop(startTime + durationSec);
+},
+
+// Schedules MULTIPLE simultaneous tones (one symbol = one nibble = up to 4 tones)
+scheduleTones: function(frequencies, startTime, durationSec) {
+    if (!frequencies.length) return;
+    const masterGain = this.audioCtx.createGain();
+    const peakVolume = 0.9 / frequencies.length; // prevent clipping when several tones overlap
+
+    masterGain.gain.setValueAtTime(0, startTime);
+    masterGain.gain.linearRampToValueAtTime(peakVolume, startTime + 0.005);
+    masterGain.gain.setValueAtTime(peakVolume, startTime + durationSec - 0.005);
+    masterGain.gain.linearRampToValueAtTime(0, startTime + durationSec);
+    masterGain.connect(this.audioCtx.destination);
+
+    frequencies.forEach(freq => {
+        const osc = this.audioCtx.createOscillator();
+        osc.type = 'sine';
+        osc.frequency.value = freq;
+        osc.connect(masterGain);
+        osc.start(startTime);
+        osc.stop(startTime + durationSec);
+    });
 },
 
     // ==========================================
@@ -258,19 +283,22 @@ scheduleTone: function(frequency, startTime, durationSec) {
         let byteCount = 0;
 
         while (cursor + windowSamples < samples.length) {
-            const m0   = mag(this.FREQ_0, cursor);
-            const m1   = mag(this.FREQ_1, cursor);
+            const laneMags = this.LANE_FREQS.map(f => mag(f, cursor));
             const mEnd = mag(this.END_FREQ, cursor);
-            console.log(`[Bit] t=${(cursor / sampleRate).toFixed(3)}s F0=${m0.toFixed(2)} F1=${m1.toFixed(2)} END=${mEnd.toFixed(2)}`);
+            console.log(`[Symbol] t=${(cursor / sampleRate).toFixed(3)}s lanes=[${laneMags.map(m => m.toFixed(2)).join(', ')}] END=${mEnd.toFixed(2)}`);
 
-            if (mEnd > this.THRESHOLD && mEnd > m0 && mEnd > m1 && receivedBits.length >= 24) {
+            if (mEnd > this.THRESHOLD && mEnd > Math.max(...laneMags) && receivedBits.length >= 24) {
                 console.log("[RX] End marker detected. Stopping decode.");
                 break;
             }
 
-            const bit = (m1 > m0) ? 1 : 0;
-            receivedBits.push(bit);
-            currentByteBits.push(bit);
+            const maxLanePeak = Math.max(...laneMags);
+            const dynamicCutoff = Math.max(this.THRESHOLD, maxLanePeak * 0.6);
+            const nibbleBits = laneMags.map(m => m >= dynamicCutoff ? 1 : 0);
+
+            // Push MSB -> LSB (Lane 3 -> Lane 0), same order transmitter used
+            receivedBits.push(nibbleBits[3], nibbleBits[2], nibbleBits[1], nibbleBits[0]);
+            currentByteBits.push(nibbleBits[3], nibbleBits[2], nibbleBits[1], nibbleBits[0]);
 
             if (currentByteBits.length === 8) {
                 const byteVal = parseInt(currentByteBits.join(''), 2);
