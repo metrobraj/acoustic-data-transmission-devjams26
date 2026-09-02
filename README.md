@@ -9,9 +9,9 @@
 
 ## Project Overview
 
-**AirChirp** was conceived during the Google Developer Groups DevJams'26 hackathon at VIT Vellore to bridge isolated devices without Wi-Fi, Bluetooth, or physical cables. The goal was to convert binary files into structured sound streams and decode them cleanly across high-reverberation room environments.
+**AirChirp** was created during the Google Developer Groups DevJams'26 hackathon at VIT Vellore to bridge isolated devices without Wi-Fi, Bluetooth, or physical cables. The goal was to convert binary files into structured sound streams and decode them cleanly across high-reverberation room environments.
 
-While the project could not be completed before the hackathon deadline due to physical acoustic edge cases and heterogeneous OS audio driver conflicts, significant low-level DSP architecture was successfully designed and prototyped.
+While the project could not be completed before the hackathon deadline due to physical acoustic edge cases, significant low-level DSP architecture was successfully designed and prototyped.
 
 ---
 
@@ -36,7 +36,7 @@ To counter reverberation time (RT60) and noise, 3 guardrails were implemented:
 
 The project is currently paused due to physical layer challenges encountered during live environment testing:
 
-It is possible that the device's hardware is not designed for such transfer through(unverified). Noise immunity could not be achieved with a reasonable accuracy. Real-time latency Future solutions should aim to probe and fix these issues.
+It is possible that the device's hardware is not designed for such transfer through(unverified). Noise immunity could not be achieved with a reasonable accuracy. Real-time latency was a significant issue plaguing the sound stream decoding accuracy. Future solutions should aim to probe and fix these issues.
 
 ---
 
