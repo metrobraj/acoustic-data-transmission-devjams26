@@ -32,11 +32,17 @@ To counter reverberation time (RT60) and noise, 3 guardrails were implemented:
 
 ---
 
-## Hardware Edge Cases & Issues
+## Edge Cases
 
 The project is currently paused due to physical layer challenges encountered during live environment testing:
 
 It is possible that the device's hardware is not designed for such transfer through(unverified). Noise immunity could not be achieved with a reasonable accuracy. Real-time latency was a significant issue plaguing the sound stream decoding accuracy. Future solutions should aim to probe and fix these issues.
 
 ---
+## Pending Issues
 
+1. Dynamic threshold should be implemented such that the receiver is adjusted to variable noise. A counter-solution may be dynamic frequency-hopping based on real-time ambient noise levels.
+2. Encryption must be implemented through client-side AES-256-GCM encryption layer via Web Crypto API prior to data transfer.
+3. Bidirectional handshake for dynamic packet retransmission requests is suggested.
+4. Real-time scrolling FFT spectrogram visualization rendered via HTML5 Canvas requires fix and polishing.
+5. UI requires enhancement.
