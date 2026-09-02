@@ -31,6 +31,22 @@ To counter reverberation time (RT60) and noise, 3 guardrails were implemented:
 * **Pilot Sync:** Aligns the sample clock to middle-of-symbol timing windows.
 
 ---
+##Tech Stack  
+
+### **Frontend & User Interface**
+* **HTML5 / CSS3:** Glass-morphed UI design.
+* **Vanilla JavaScript (ES6+):** Pure browser execution without framework dependencies.
+
+### **Digital Signal Processing (DSP) & Audio**
+* **Web Audio API:** Hardware-level audio routing, raw PCM buffer capture, `AudioContext` creation, and `OscillatorNode` synthesis.
+* **Goertzel Algorithm:** Single-tone frequency analysis for low-overhead, targeted magnitude extraction across discrete audio lanes.
+* **WebAssembly (WASM):** C++ compiled audio processing integration using `ggwave` bindings for high-speed PCM encoding/decoding(Indeterminate).
+
+### **Data & Payload Compression**
+* **`fflate`:** Real-time DEFLATE/INFLATE compression and decompression pipeline to minimize byte payload size before transmission.
+* **TypedArrays:** Native `Uint8Array` and `Int8Array` memory buffers for fast binary-to-nibble bitwise operations.
+
+---
 
 ## Edge Cases
 
